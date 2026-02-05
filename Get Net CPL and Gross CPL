@@ -1,0 +1,123 @@
+CREATE OR REPLACE TEMPORARY TABLE T_PRODUCT_EVENTS AS
+/* 1. Sales */
+SELECT 
+    a.uai_id,
+    b.rd_nm,
+    a.score_branch_no AS branch_n,
+    a.coverage_effective_dt AS cpl_date,
+    1 AS sold,
+    0 AS cancel,
+    0 AS cpl_loans
+FROM core.optional_product_sale a
+LEFT JOIN bdm.app_loan_production b 
+    ON a.uai_id = b.uai_id AND a.score_branch_no = b.own_score_brnch
+WHERE a.SALE_CT = 1 
+  AND a.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP', 'DIP', 'ATL', 'HA', 'SSG', 'MLP')
+
+UNION ALL
+
+/* 2. Cancellations */
+SELECT 
+    a.uai_id,
+    b.rd_nm,
+    a.score_branch_no AS branch_n,
+    a.CANCEL_EFFECTIVE_DT AS cpl_date,
+    0 AS sold,
+    1 AS cancel,
+    0 AS cpl_loans
+FROM core.OPTIONAL_PRODUCT_SALE a
+LEFT JOIN bdm.app_loan_production b 
+    ON a.uai_id = b.uai_id AND a.SCORE_BRANCH_NO = b.own_score_brnch
+WHERE a.SALE_CT = 1 
+  AND a.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP', 'DIP', 'ATL', 'HA', 'SSG', 'MLP')
+  AND (a.CANCEL_60DAY_CT = 1 OR a.CANCEL_30DAY_CT = 1) 
+  AND a.CUSTOMER_INITIATED_CANCEL_YN = 'Y'
+
+UNION ALL
+
+/* 3. Loans */
+SELECT 
+    a.uai_id,
+    c.rd_nm,
+    a.BRANCH_NO AS branch_n,
+    a.CONTRACT_DT AS cpl_date,
+    0 AS sold,
+    0 AS cancel,
+    1 AS cpl_loans
+FROM EDS.CORE.ACCOUNT a
+INNER JOIN sa.pl_acct_all_vol b 
+    ON a.uai_id = b.uai_id 
+    AND b.Vol_Type = 'N' 
+    AND b.check_no = '0' 
+    AND b.RETRACT_YN = 'N'
+LEFT JOIN bdm.app_loan_production c 
+    ON a.uai_id = c.uai_id AND a.branch_no = c.own_score_brnch;
+-----------------------------------    
+SELECT 
+    pe.uai_id,
+    pe.branch_n,
+    alp.contr_date,
+    pe.rd_nm,
+    alp.offer_type,
+    alp.cust_type,
+    alp.secure_type,
+    alp.rsk_lvl,
+    alp.channel,
+    alp.closing_method,
+    alp.P_ADR_ST,
+    alp.ACAP_REFR_ID,
+    
+    -- Aggregations
+    SUM(pe.cpl_loans) AS net_cpl_loans,
+    SUM(pe.sold)      AS sold_total,
+    SUM(pe.cancel)    AS cancel_total
+
+FROM T_PRODUCT_EVENTS pe
+/* Using RIGHT JOIN to keep all Loan Production records that match criteria */
+RIGHT JOIN bdm.app_loan_production alp 
+    ON pe.uai_id = alp.uai_id
+
+WHERE alp.branch_nm NOT LIKE '%CENTRALIZED%'
+  AND alp.core_v_capp = 'Core'
+  AND alp.contr_date >= '2026-01-01'
+
+GROUP BY ALL;
+
+-------------
+
+
+SELECT 
+    -- We now use cpl_date (the date the event actually happened)
+    DATE_TRUNC('MONTH', pe.cpl_date) AS reporting_month,
+    
+    CASE 
+        WHEN alp.closing_method IN ('Online') THEN 'Online'
+        WHEN alp.closing_method IN ('Kiosk') THEN 'Kiosk'
+        ELSE 'Other' 
+    END AS closing_method_group,
+    
+    alp.cust_type,
+    
+    -- Totals based on the day they were processed
+    SUM(pe.cpl_loans) AS total_loans_processed,
+    SUM(pe.sold)      AS total_coverages_written,
+    SUM(pe.cancel)    AS total_coverages_cancelled,
+
+    -- Gross CPL: Written / Loans
+    CAST(SUM(pe.sold) AS FLOAT) 
+        / NULLIF(SUM(pe.cpl_loans), 0) AS gross_cpl,
+
+    -- Net CPL: (Written - Cancelled) / Loans
+    CAST(SUM(pe.sold) - SUM(pe.cancel) AS FLOAT) 
+        / NULLIF(SUM(pe.cpl_loans), 0) AS net_cpl
+
+FROM T_PRODUCT_EVENTS pe
+-- We JOIN back to get the attributes of the loan associated with that event
+LEFT JOIN bdm.app_loan_production alp 
+    ON pe.uai_id = alp.uai_id
+WHERE alp.branch_nm NOT LIKE '%CENTRALIZED%'
+  AND alp.core_v_capp = 'Core'
+  AND pe.cpl_date >= '2025-01-01'  -- Filter by the event date, not contract date
+GROUP BY 1, 2, 3
+ORDER BY 1 DESC, 2, 3;
+----
