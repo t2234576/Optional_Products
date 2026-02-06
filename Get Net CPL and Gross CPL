@@ -53,37 +53,7 @@ INNER JOIN sa.pl_acct_all_vol b
 LEFT JOIN bdm.app_loan_production c 
     ON a.uai_id = c.uai_id AND a.branch_no = c.own_score_brnch;
 -----------------------------------    
-SELECT 
-    pe.uai_id,
-    pe.branch_n,
-    alp.contr_date,
-    pe.rd_nm,
-    alp.offer_type,
-    alp.cust_type,
-    alp.secure_type,
-    alp.rsk_lvl,
-    alp.channel,
-    alp.closing_method,
-    alp.P_ADR_ST,
-    alp.ACAP_REFR_ID,
-    
-    -- Aggregations
-    SUM(pe.cpl_loans) AS net_cpl_loans,
-    SUM(pe.sold)      AS sold_total,
-    SUM(pe.cancel)    AS cancel_total
 
-FROM T_PRODUCT_EVENTS pe
-/* Using RIGHT JOIN to keep all Loan Production records that match criteria */
-RIGHT JOIN bdm.app_loan_production alp 
-    ON pe.uai_id = alp.uai_id
-
-WHERE alp.branch_nm NOT LIKE '%CENTRALIZED%'
-  AND alp.core_v_capp = 'Core'
-  AND alp.contr_date >= '2026-01-01'
-
-GROUP BY ALL;
-
--------------
 
 
 SELECT 
@@ -91,10 +61,10 @@ SELECT
     DATE_TRUNC('MONTH', pe.cpl_date) AS reporting_month,
     
     CASE 
-        WHEN alp.closing_method IN ('Online') THEN 'Online'
-        WHEN alp.closing_method IN ('Kiosk') THEN 'Kiosk'
+        WHEN UPPER(closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
+        WHEN UPPER(closing_method) IN ('KIOSK', 'BRANCH') THEN 'Branch'
         ELSE 'Other' 
-    END AS closing_method_group,
+    END AS channel_group,
     
     alp.cust_type,
     
@@ -120,4 +90,3 @@ WHERE alp.branch_nm NOT LIKE '%CENTRALIZED%'
   AND pe.cpl_date >= '2025-01-01'  -- Filter by the event date, not contract date
 GROUP BY 1, 2, 3
 ORDER BY 1 DESC, 2, 3;
-----
