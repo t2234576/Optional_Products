@@ -1,20 +1,12 @@
-CREATE OR REPLACE TEMP TABLE OP_BASE_YJY AS
-/* 1. Sales */
-SELECT 
-    a.uai_id,
-    b.rd_nm,
-    b.closing_method,
-    b.cust_type, -- <--- Added back
-    a.score_branch_no AS branch_n,
-    a.coverage_effective_dt AS cpl_date,
-    a.coverage_abbreviation_cd AS product_cd,
-    1 AS sold,
+old, 
     0 AS cancel,
     0 AS cpl_loans
 FROM core.optional_product_sale a
-LEFT JOIN bdm.app_loan_production b ON a.uai_id = b.uai_id AND a.score_branch_no = b.own_score_brnch
-WHERE a.SALE_CT = 1 
-  AND a.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP', 'DIP', 'ATL', 'HA', 'SSG', 'OMP', 'AUT', 'MMT')
+LEFT JOIN bdm.app_loan_production b 
+    ON a.uai_id = b.uai_id 
+    AND a.score_branch_no = b.own_score_brnch
+WHERE a.LOAN_ELIGIBLE = 'Y' 
+  AND a.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP', 'DIP', 'ATL', 'HA', 'SSG', 'OMP')
 
 UNION ALL
 
@@ -22,94 +14,103 @@ UNION ALL
 SELECT 
     a.uai_id,
     b.rd_nm,
+    -- NEW DIMENSIONS
+    b.RSK_LVL AS risk_grade,
+    b.SECURE_TYPE AS security_type,
+    b.P_CUR_OCC_CD AS empl_type,
+    --------------------------------
     b.closing_method,
-    b.cust_type, -- <--- Added back
-    a.score_branch_no AS branch_n,
+    b.cust_type,
     a.CANCEL_EFFECTIVE_DT AS cpl_date,
     a.coverage_abbreviation_cd AS product_cd,
     0 AS sold,
     1 AS cancel,
     0 AS cpl_loans
 FROM core.OPTIONAL_PRODUCT_SALE a
-LEFT JOIN bdm.app_loan_production b ON a.uai_id = b.uai_id AND a.SCORE_BRANCH_NO = b.own_score_brnch
+LEFT JOIN bdm.app_loan_production b 
+    ON a.uai_id = b.uai_id 
+    AND a.SCORE_BRANCH_NO = b.own_score_brnch
 WHERE a.SALE_CT = 1 
   AND (a.CANCEL_60DAY_CT = 1 OR a.CANCEL_30DAY_CT = 1) 
   AND a.CUSTOMER_INITIATED_CANCEL_YN = 'Y'
-  AND a.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP', 'DIP', 'ATL', 'HA', 'SSG', 'OMP', 'AUT', 'MMT')
 
 UNION ALL
 
-/* 3. Loans */
+/* 3. Total Loan Base (The Denominator) */
 SELECT 
     a.uai_id,
     c.rd_nm,
+    -- NEW DIMENSIONS
+    c.RSK_LVL AS risk_grade,
+    c.SECURE_TYPE AS security_type,
+    c.P_CUR_OCC_CD AS empl_type,
+    --------------------------------
     c.closing_method,
-    c.cust_type, -- <--- Added back
-    a.BRANCH_NO AS branch_n,
+    c.cust_type,
     a.CONTRACT_DT AS cpl_date,
     NULL AS product_cd,
     0 AS sold,
     0 AS cancel,
     1 AS cpl_loans
 FROM EDS.CORE.ACCOUNT a
-INNER JOIN sa.pl_acct_all_vol b ON a.uai_id = b.uai_id AND b.Vol_Type = 'N' AND b.check_no = '0' AND b.RETRACT_YN = 'N'
-LEFT JOIN bdm.app_loan_production c ON a.uai_id = c.uai_id AND a.branch_no = c.own_score_brnch;
------------------------------------------------------------------------------------------------
-------ADD PRODUCT FILTER-----------------------------------------------------------------------
------------------------------------------------------------------------------------------------
+INNER JOIN sa.pl_acct_all_vol b 
+    ON a.uai_id = b.uai_id 
+    AND b.Vol_Type = 'N' 
+    AND b.check_no = '0' 
+    AND b.RETRACT_YN = 'N'
+LEFT JOIN bdm.app_loan_production c 
+    ON a.uai_id = c.uai_id 
+    AND a.branch_no = c.own_score_brnch;
+
+
 CREATE OR REPLACE TEMP TABLE OP_GOVERNANCE_YJY AS
 SELECT 
     uai_id,
-    rd_nm,
-    cust_type, 
+    cpl_date,
+    cust_type,
+    
+    -- Pass Through New Dimensions
+    risk_grade,
+    empl_type,
+    
+    -- Clean up Security Type (Optional readability fix)
+    CASE 
+        WHEN security_type IN ('S', 'Secured') THEN 'Secured'
+        WHEN security_type IN ('U', 'Unsecured') THEN 'Unsecured'
+        ELSE security_type 
+    END AS loan_security,
+
+    -- 1. Channel Grouping
     CASE 
         WHEN UPPER(closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
         WHEN UPPER(closing_method) IN ('KIOSK', 'BRANCH') THEN 'Branch'
         ELSE 'Other' 
     END AS channel_group,
     
-    -- Dashboard Names & Status
+    -- 2. Dashboard Name Mapping
     CASE 
         WHEN product_cd = 'SCL' THEN 'Life_written'
         WHEN product_cd = 'SCA' THEN 'AH_written'
         WHEN product_cd = 'IUI' THEN 'IUI_written'
-        WHEN product_cd = 'DIP' THEN 'dip_written'
+        WHEN product_cd = 'DIP' THEN 'DIP_written'
         WHEN product_cd = 'GAP' THEN 'GAP_Written'
         WHEN product_cd = 'ATL' THEN 'TermLife_written'
         WHEN product_cd = 'HA'  THEN 'H_A_written'
         WHEN product_cd = 'SSG' THEN 'SSG_written'
         WHEN product_cd = 'OMP' THEN 'OMP_written'
-        ELSE 'Excluded/Other'
-    END AS dashboard_name,
+        WHEN product_cd IS NULL THEN 'Loan Denominator'
+        ELSE 'Excluded/Legacy'
+    END AS product_name,
 
+    -- 3. Reporting Status
     CASE 
         WHEN product_cd IN ('SCL','SCA','IUI','DIP','ATL','HA','SSG','OMP','GAP') THEN 'Included'
         WHEN product_cd IS NULL THEN 'Loan Denominator'
         ELSE 'Excluded'
     END AS reporting_status,
 
+    product_cd,
     sold,
     cancel,
-    cpl_loans,
-    cpl_date
+    cpl_loans
 FROM OP_BASE_YJY;
------------------------------------------------------------------------------------------------
-------GET CPL-----------------------------------------------------------------------
------------------------------------------------------------------------------------------------
-SELECT 
-    DATE_TRUNC('MONTH', cpl_date) AS reporting_month,
-    cust_type,
-    channel_group,
-    
-    SUM(cpl_loans) AS total_loans,
-    SUM(sold) - SUM(cancel) AS net_written,
-
-    -- Net CPL
-    CAST(SUM(sold) - SUM(cancel) AS FLOAT) 
-        / NULLIF(SUM(cpl_loans), 0) AS net_cpl
-
-FROM OP_GOVERNANCE_YJY
-WHERE reporting_status IN ('Included', 'Loan Denominator')
-  AND cpl_date >= '2025-01-01'
-GROUP BY 1, 2, 3
-ORDER BY 1 ASC, 3;
