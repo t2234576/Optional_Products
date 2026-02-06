@@ -1,4 +1,19 @@
-old, 
+CREATE OR REPLACE TEMP TABLE OP_BASE_YJY AS
+
+/* 1. All Eligible Product Offers (The "Pops") */
+SELECT 
+    a.uai_id,
+    b.rd_nm,
+    -- NEW DIMENSIONS
+    b.RSK_LVL AS risk_grade,
+    b.SECURE_TYPE AS security_type,
+    b.P_CUR_OCC_CD AS empl_type, -- Using your specific column for employment
+    --------------------------------
+    b.closing_method,
+    b.cust_type,
+    a.coverage_effective_dt AS cpl_date,
+    a.coverage_abbreviation_cd AS product_cd,
+    a.SALE_CT AS sold, 
     0 AS cancel,
     0 AS cpl_loans
 FROM core.optional_product_sale a
