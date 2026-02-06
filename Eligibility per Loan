@@ -1,0 +1,24 @@
+SELECT 
+    reporting_month,
+    cust_type,
+    channel_group,
+    -- The "Color" metrics
+    ROUND(AVG(eligible_product_count), 2) AS avg_products_on_screen,
+    COUNT(uai_id) AS sample_loan_volume
+FROM
+    (
+    SELECT 
+        DATE_TRUNC('MONTH', cpl_date) AS reporting_month,
+        uai_id,
+        cust_type,
+        channel_group,
+        -- Count how many of the 9 products were eligible for this specific loan
+        COUNT(product_cd) AS eligible_product_count
+    FROM OP_GOVERNANCE_YJY
+    WHERE reporting_status = 'Included'
+        AND CHANNEL_GROUP <> 'Other'
+        AND reporting_month >='2025-01-01'
+    GROUP BY 1, 2, 3,4
+    )
+GROUP BY 1, 2,3
+ORDER BY 1, 2,3;
