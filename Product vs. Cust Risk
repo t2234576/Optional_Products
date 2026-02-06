@@ -1,0 +1,60 @@
+SELECT 
+    product_name AS product_name,
+    
+    -- "Bucket" the risk grades with a number for Excel sorting
+    CASE 
+        -- 1. Super Prime (Captures S, P, SP, S&P)
+        WHEN UPPER(risk_grade) IN ('S', 'P', 'SP', 'S&P', 'SUPER PRIME') THEN '1 - S&P'
+        
+        -- 2. A Grades (Captures A, A+, A-, AB)
+        WHEN UPPER(risk_grade) LIKE 'A%' THEN '2 - A'
+        
+        -- 3. B Grades (Captures B, B+, B-)
+        WHEN UPPER(risk_grade) LIKE 'B%' THEN '3 - B'
+        
+        -- 4. C Grades (Captures C, C+, C-)
+        WHEN UPPER(risk_grade) LIKE 'C%' THEN '4 - C'
+        
+        -- 5. Everything else (D, E, Nulls if not filtered, etc.)
+        ELSE '5 - D and Below' 
+    END AS risk_rating_grouped,
+    
+    SUM(sold) AS total_sales
+
+FROM OP_GOVERNANCE_YJY
+WHERE reporting_status = 'Included' 
+  AND cancel = 0 
+  -- Ensure we don't have blank risk grades messing up the "D and Below" bucket
+  AND risk_grade IS NOT NULL 
+  AND risk_grade <> ''
+  AND YEAR(cpl_date) = 2025
+GROUP BY 1, 2
+ORDER BY 1, 2;
+SELECT 
+    product_name AS product_name,
+    
+    -- Assigning sequence numbers to force correct logical sorting in Excel
+    CASE 
+        WHEN risk_grade = 'S' THEN '1.S'
+        WHEN risk_grade = 'P' THEN '2.P'
+        WHEN risk_grade = 'A' THEN '3.A'
+        WHEN risk_grade = 'B' THEN '4.B'
+        WHEN risk_grade = 'C' THEN '5.C'
+        WHEN risk_grade = 'D' THEN '6.D'
+        WHEN risk_grade = 'E' THEN '7.E'
+        WHEN risk_grade = 'F' THEN '8.F'
+        -- Captures anything else that might appear
+        ELSE '9.' || risk_grade 
+    END AS risk_rating_ranked,
+    
+    SUM(sold) AS total_sales
+
+FROM OP_GOVERNANCE_YJY
+WHERE reporting_status = 'Included' 
+  AND cancel = 0 
+  AND risk_grade IS NOT NULL 
+  AND risk_grade <> ''
+  AND YEAR(cpl_date) = 2025
+GROUP BY 1, 2
+-- This order ensures S & P are first, then A-F in sequence
+ORDER BY 1, 2;
