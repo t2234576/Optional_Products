@@ -1,4 +1,4 @@
-CREATE OR REPLACE TEMPORARY TABLE T_PRODUCT_EVENTS AS
+CREATE OR REPLACE TABLE EDS.SB_COMMON.OP_BASE_YJY AS
 /* 1. Sales */
 SELECT 
     a.uai_id,
@@ -58,7 +58,7 @@ LEFT JOIN bdm.app_loan_production c
 
 SELECT 
     -- We now use cpl_date (the date the event actually happened)
-    DATE_TRUNC('MONTH', pe.cpl_date) AS reporting_month,
+    DATE_TRUNC('MONTH', op.cpl_date) AS reporting_month,
     
     CASE 
         WHEN UPPER(closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
@@ -69,24 +69,24 @@ SELECT
     alp.cust_type,
     
     -- Totals based on the day they were processed
-    SUM(pe.cpl_loans) AS total_loans_processed,
-    SUM(pe.sold)      AS total_coverages_written,
-    SUM(pe.cancel)    AS total_coverages_cancelled,
+    SUM(op.cpl_loans) AS total_loans_processed,
+    SUM(op.sold)      AS total_coverages_written,
+    SUM(op.cancel)    AS total_coverages_cancelled,
 
     -- Gross CPL: Written / Loans
-    CAST(SUM(pe.sold) AS FLOAT) 
-        / NULLIF(SUM(pe.cpl_loans), 0) AS gross_cpl,
+    CAST(SUM(op.sold) AS FLOAT) 
+        / NULLIF(SUM(op.cpl_loans), 0) AS gross_cpl,
 
     -- Net CPL: (Written - Cancelled) / Loans
-    CAST(SUM(pe.sold) - SUM(pe.cancel) AS FLOAT) 
-        / NULLIF(SUM(pe.cpl_loans), 0) AS net_cpl
+    CAST(SUM(op.sold) - SUM(op.cancel) AS FLOAT) 
+        / NULLIF(SUM(op.cpl_loans), 0) AS net_cpl
 
-FROM T_PRODUCT_EVENTS pe
+FROM EDS.SB_COMMON.OP_BASE_YJY op
 -- We JOIN back to get the attributes of the loan associated with that event
 LEFT JOIN bdm.app_loan_production alp 
-    ON pe.uai_id = alp.uai_id
+    ON op.uai_id = alp.uai_id
 WHERE alp.branch_nm NOT LIKE '%CENTRALIZED%'
   AND alp.core_v_capp = 'Core'
-  AND pe.cpl_date >= '2025-01-01'  -- Filter by the event date, not contract date
+  AND op.cpl_date >= '2025-01-01'  -- Filter by the event date, not contract date
 GROUP BY 1, 2, 3
 ORDER BY 1 DESC, 2, 3;
