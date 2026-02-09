@@ -1,0 +1,29 @@
+CREATE OR REPLACE TEMP TABLE OP_SALE AS
+SELECT 
+        a.uai_id,
+        b.rd_nm,
+        b.RSK_LVL AS risk_grade,
+        b.SECURE_TYPE AS security_type,
+        b.P_CUR_OCC_CD AS empl_type,
+        b.closing_method,
+        b.cust_type,
+        a.coverage_effective_dt AS cpl_date,
+        a.coverage_abbreviation_cd AS product_cd,
+        a.SALE_CT AS sold
+    FROM core.optional_product_sale a
+    LEFT JOIN bdm.app_loan_production b 
+        ON a.uai_id = b.uai_id 
+        AND a.score_branch_no = b.own_score_brnch
+    WHERE a.LOAN_ELIGIBLE = 'Y'
+;
+SELECT 
+    product_cd,
+    -- Latest date the product appeared in the data
+    MAX(cpl_date) AS last_cpl_date,
+    -- Latest date the product was actually sold
+    MAX(CASE WHEN sold = 1 THEN cpl_date END) AS last_cpl_sold_date
+FROM OP_SALE
+GROUP BY 
+    product_cd
+ORDER BY 
+    last_cpl_sold_date DESC;
