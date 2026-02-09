@@ -18,9 +18,12 @@ SELECT
 ;
 SELECT 
     product_cd,
-    -- Latest date the product appeared in the data
-    MAX(cpl_date) AS last_cpl_date,
-    -- Latest date the product was actually sold
+    -- THE EARLIEST (START)
+    MIN(cpl_date) AS earliest_product_date,
+    MIN(CASE WHEN sold = 1 THEN cpl_date END) AS earliest_cpl_sold_date,
+
+    -- THE LATEST (END)
+    MAX(cpl_date) AS last_product_date,
     MAX(CASE WHEN sold = 1 THEN cpl_date END) AS last_cpl_sold_date
 FROM OP_SALE
 GROUP BY 
