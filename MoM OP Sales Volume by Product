@@ -1,0 +1,14 @@
+SELECT 
+    DATE_TRUNC('month', cpl_date) AS sales_month,
+    product_name,
+    SUM(sold) AS gross_sales,
+    SUM(cancel) AS cancellations,
+    -- Net Sales calculation
+    SUM(sold) - SUM(cancel) AS net_sales
+FROM OP_GOVERNANCE_YJY
+WHERE reporting_status = 'Included'
+  -- Filter for 2025 Timeframe
+  AND cpl_date >= '2025-01-01' 
+  AND cpl_date <= '2025-12-31'
+GROUP BY 1, 2
+ORDER BY 1 ASC, net_sales DESC;
