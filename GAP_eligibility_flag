@@ -2,8 +2,10 @@ CREATE OR REPLACE TEMPORARY TABLE GAP_eligibility_flag AS
 SELECT 
     a.UAI_ID,
     a.OWN_SCORE_BRNCH,
-    
+
+    -- 0. It is extremely rare for a GAP fee (typically $500–$1,000) to exceed the value of a car used for a booked loan. If the car were worth less than $1,000, it likely wouldn't qualify as collateral for a "Secured" loan in the first place.
     -- 1. THE FLAG: "Positive" Logic (All these must be TRUE to be Eligible)
+    
     CASE 
         WHEN 
              -- CRITERIA 1: Must be in an Allowed State (Waiver OR Insurance) 
