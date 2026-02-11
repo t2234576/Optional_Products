@@ -1,11 +1,17 @@
-CREATE OR REPLACE TEMPORARY TABLE GAP_eligibility_flag AS
+CREATE OR REPLACE TEMPORARY TABLE GAP_Eligibility_Core AS
 SELECT 
     a.UAI_ID,
     a.OWN_SCORE_BRNCH,
-    -- 0. It is extremely rare for a GAP fee (typically $500–$1,000) to exceed the value of a car used for a booked loan. If the car were worth less than $1,000, it likely wouldn't qualify as collateral for a "Secured" loan in the first place
-    -- 1. TOTAL GAP ELIGIBLE (All criteria + either Waiver or Insurance state)
+
+    -- 1. THE FLAG: All rules must be met
     CASE 
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
+        WHEN 
+             -- Valid State from Grid
+             a.P_ADR_ST IN (
+                'AL','CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY',
+                'AZ','CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA'
+             )
+             AND ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
              AND a.TERM <= 72 
              AND a.AUTO_GROSS_LTV IS NOT NULL
              AND (
@@ -13,61 +19,46 @@ SELECT
                  OR 
                  (a.P_ADR_ST NOT IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV >= 1.00)
              )
-             AND a.P_ADR_ST IN (
-                'AL','CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY', -- W States
-                'AZ','CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA'  -- I States
-             )
-        THEN 1 ELSE 0 
+        THEN 1 
+        ELSE 0 
     END AS IS_GAP_ELIGIBLE,
 
-    -- 2. GAP WAIVER ELIGIBLE (Common criteria + strictly 'W' states from grid)
+    -- 2. THE DETAILED REASON (Restored)
     CASE 
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
-             AND a.TERM <= 72 
-             AND a.AUTO_GROSS_LTV IS NOT NULL
-             AND (
-                 (a.P_ADR_ST = 'AL' AND a.AUTO_GROSS_LTV BETWEEN 1.00 AND 2.00) -- AL special LTV
-                 OR 
-                 (a.P_ADR_ST IN ('CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY') AND a.AUTO_GROSS_LTV >= 1.00)
-             )
-             AND a.P_ADR_ST IN ('AL','CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY')
-        THEN 1 ELSE 0 
-    END AS IS_GAP_WAIVER_ELIGIBLE,
-
-    -- 3. GAP INSURANCE ELIGIBLE (Common criteria + strictly 'I' states from grid)
-    CASE 
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
-             AND a.TERM <= 72 
-             AND a.AUTO_GROSS_LTV IS NOT NULL
-             AND (
-                 (a.P_ADR_ST = 'AZ' AND a.AUTO_GROSS_LTV BETWEEN 1.00 AND 2.00) -- AZ special LTV
-                 OR 
-                 (a.P_ADR_ST IN ('CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA') AND a.AUTO_GROSS_LTV >= 1.00)
-             )
-             AND a.P_ADR_ST IN ('AZ','CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA')
-        THEN 1 ELSE 0 
-    END AS IS_GAP_INSURANCE_ELIGIBLE,
-
-    -- 4. REASONING (Maintains the "Ineligible" logic we built)
-    CASE 
+        -- Check State Availability First (Source: State Product Availability Grid)
         WHEN a.P_ADR_ST NOT IN (
             'AL','CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY',
             'AZ','CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA'
-        ) THEN 'Ineligible: Product Not Sold in State (' || a.P_ADR_ST || ')'
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) <> 1 THEN 'Ineligible: Collateral Count is ' || ZEROIFNULL(a.AUTO_NUM_COLLAT)
+        ) THEN 'Ineligible: Product Not Sold in State (' || a.P_ADR_ST || ')' 
+        
+        -- Check Collateral Rules
+        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 0 THEN 'Ineligible: Unsecured / No Auto'
+        WHEN a.AUTO_NUM_COLLAT > 1 THEN 'Ineligible: Multi-Vehicle'
+        
+        -- Check Term (Source: GAP Policy)
         WHEN a.TERM > 72 THEN 'Ineligible: Term (' || a.TERM || ') > 72 Months'
+        
+        -- Check LTV (Source: GAP Policy)
         WHEN a.AUTO_GROSS_LTV IS NULL THEN 'Ineligible: Missing LTV Data'
         WHEN a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV > 2.00 THEN 'Ineligible: AL/AZ LTV > 200%'
         WHEN a.AUTO_GROSS_LTV < 1.00 THEN 'Ineligible: LTV < 100%'
+        
         ELSE 'Eligible'
     END AS GAP_REASON,
+
+    -- 3. PRODUCT TYPE MAPPING (Restored)
+    CASE 
+        WHEN a.P_ADR_ST IN ('AL','CA','DE','FL','ID','IL','KY','MD','NE','OH','OK','SC','SD','WV','WI','WY') THEN 'Waiver' 
+        WHEN a.P_ADR_ST IN ('AZ','CO','GA','HI','IN','KS','LA','ME','MI','MN','MO','MS','NC','NM','OR','PA','TN','UT','VA') THEN 'Insurance' 
+        ELSE 'Not Available' 
+    END AS POTENTIAL_GAP_TYPE,
 
     a.AUTO_GROSS_LTV,
     a.P_ADR_ST AS STATE_CODE,
     a.TERM
+
 FROM bdm.app_loan_production a
 WHERE a.CORE_V_CAPP = 'Core'
   AND a.APPL_STAT = 'BOOK'
-  AND a.APPROVED_FLAG = 'Y';
-
-  
+  AND a.APPROVED_FLAG = 'Y'
+  ;
