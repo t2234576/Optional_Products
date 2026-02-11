@@ -6,7 +6,7 @@ SELECT
     -- 1. THE FLAG: "Positive" Logic (All these must be TRUE to be Eligible)
     CASE 
         WHEN 
-             -- CRITERIA 1: Must be in an Allowed State (Waiver OR Insurance) [cite: 5, 12]
+             -- CRITERIA 1: Must be in an Allowed State (Waiver OR Insurance) 
              a.P_ADR_ST IN (
                 'AL','AZ','CA','CO','DE','FL','GA','HI','ID','IL','IN','KS','KY','LA',
                 'MD','ME','MI','MN','MO','MS','NC','NE','NH','NM','OH','OK','OR','PA',
@@ -16,7 +16,7 @@ SELECT
              -- CRITERIA 2: Must have exactly 1 vehicle
              AND ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
              
-             -- CRITERIA 3: Term must be <= 72 months [cite: 4]
+             -- CRITERIA 3: Term must be <= 72 months 
              AND a.TERM <= 72 
              
              -- CRITERIA 4: LTV Data exists
