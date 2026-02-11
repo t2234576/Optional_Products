@@ -77,3 +77,42 @@ WHERE a.CORE_V_CAPP = 'Core'
   AND a.APPL_STAT = 'BOOK'
   AND a.APPROVED_FLAG = 'Y'
   AND a.contr_date between '2025-01-01' and '2025-12-31';
+
+
+----------------DRIVER WALKAROUND-------------------------------------------
+  SELECT POTENTIAL_GAP_TYPE, SUM(IS_GAP_ELIGIBLE) FROM GAP_2025 GROUP BY 1;
+
+  SELECT RSK_LVL, AVG(IS_GAP_ELIGIBLE) FROM GAP_2025 GROUP BY 1;
+
+  SELECT TERM, AVG(IS_GAP_ELIGIBLE) FROM GAP_2025 GROUP BY 1 order by 1 asc;
+
+  SELECT CUST_TYPE, AVG(IS_GAP_ELIGIBLE) FROM GAP_2025 GROUP BY 1;
+
+  SELECT CASE 
+        WHEN UPPER(closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
+        WHEN UPPER(closing_method) IN ('KIOSK', 'BRANCH') THEN 'Branch'
+        ELSE 'Other'  
+        END AS closing_type, AVG(IS_GAP_ELIGIBLE) FROM GAP_2025 GROUP BY 1;
+  SELECT CASE 
+    WHEN a.AUTO_GROSS_LTV IS NULL THEN '00. Missing/Unsecured'
+    WHEN a.AUTO_GROSS_LTV < 0.90  THEN '01. < 90% (Low Risk)'
+    WHEN a.AUTO_GROSS_LTV < 1.00  THEN '02. 90-100% (Ineligible)'
+    WHEN a.AUTO_GROSS_LTV < 1.10  THEN '03. 100-110% (Sweet Spot)'
+    WHEN a.AUTO_GROSS_LTV < 1.25  THEN '04. 110-125% (Standard Gap)'
+    WHEN a.AUTO_GROSS_LTV < 1.50  THEN '05. 125-150% (High Gap)'
+    WHEN a.AUTO_GROSS_LTV <= 2.00 THEN '06. 150-200% (Critical Gap)'
+    WHEN a.AUTO_GROSS_LTV > 2.00  THEN '07. > 200% (AL/AZ Ineligible)'
+    ELSE '08. Other/Outlier'
+END AS LTV_BAND, AVG(IS_GAP_ELIGIBLE) FROM GAP_2025 AS A GROUP BY 1 ORDER BY 1 ASC;
+
+SELECT 
+    P_ADR_ST, 
+    AVG(IS_GAP_ELIGIBLE) AS AVG_ELIGIBILITY_RATE
+FROM GAP_2025
+WHERE P_ADR_ST IN (
+    'AL','AZ','CA','CO','DE','FL','GA','HI','ID','IL','IN','KS','KY','LA',
+    'ME','MD','MI','MN','MS','MO','NE','NM','NC','OH','OK','OR','PA',
+    'SC','SD','TN','UT','VA','WV','WI','WY'
+)
+GROUP BY 1 
+ORDER BY 1 ASC;
