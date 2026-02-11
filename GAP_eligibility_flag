@@ -2,31 +2,54 @@ CREATE OR REPLACE TEMPORARY TABLE GAP_eligibility_flag AS
 SELECT 
     a.UAI_ID,
     a.OWN_SCORE_BRNCH,
-    -- 1. THE FLAG: Purely functional (Remains the same)
+    
+    -- 1. THE FLAG: "Positive" Logic (All these must be TRUE to be Eligible)
     CASE 
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
-             AND a.TERM <= 72  
+        WHEN 
+             -- CRITERIA 1: Must be in an Allowed State (Waiver OR Insurance) [cite: 5, 12]
+             a.P_ADR_ST IN (
+                'AL','AZ','CA','CO','DE','FL','GA','HI','ID','IL','IN','KS','KY','LA',
+                'MD','ME','MI','MN','MO','MS','NC','NE','NH','NM','OH','OK','OR','PA',
+                'SC','SD','TN','UT','VA','WI','WV','WY'
+             )
+             
+             -- CRITERIA 2: Must have exactly 1 vehicle
+             AND ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
+             
+             -- CRITERIA 3: Term must be <= 72 months [cite: 4]
+             AND a.TERM <= 72 
+             
+             -- CRITERIA 4: LTV Data exists
+             AND a.AUTO_GROSS_LTV IS NOT NULL
+             
+             -- CRITERIA 5: LTV must be valid for that specific state
              AND (
+                -- Special Rule for AL & AZ (100% - 200%) 
                  (a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV BETWEEN 1.00 AND 2.00) 
                  OR 
+                 -- Standard Rule for everyone else (Min 100%) 
                  (a.P_ADR_ST NOT IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV >= 1.00)
              )
-        THEN 1 ELSE 0 
+        THEN 1 
+        ELSE 0 
     END AS IS_GAP_ELIGIBLE,
 
-    -- 2. THE REASON: Sequenced by priority (Fixed for NULLs)
+    -- 2. THE REASON: (We still use negative checks here to tell you WHY it failed)
     CASE 
-        -- Hard Exclusions First
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 0 THEN 'Ineligible: Unsecured / No Auto'
-        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) > 1 THEN 'Ineligible: Multi-Vehicle'
-        WHEN a.TERM > 72 THEN 'Ineligible: Term > 72 Months'
-        WHEN a.AUTO_GROSS_LTV IS NULL THEN 'Ineligible: Missing LTV Data'  
+        -- Check State Availability First
+        WHEN a.P_ADR_ST NOT IN (
+            'AL','AZ','CA','CO','DE','FL','GA','HI','ID','IL','IN','KS','KY','LA',
+            'MD','ME','MI','MN','MO','MS','NC','NE','NH','NM','OH','OK','OR','PA',
+            'SC','SD','TN','UT','VA','WI','WV','WY'
+        ) THEN 'Ineligible: Product Not Sold in State (' || a.P_ADR_ST || ')'
         
-        -- State-Specific LTV Checks
-        WHEN a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV < 1.00 THEN 'Ineligible: AL/AZ LTV < 100%'
+        -- Check Policy Limits
+        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) <> 1 THEN 'Ineligible: Collateral Count is ' || ZEROIFNULL(a.AUTO_NUM_COLLAT)
+        WHEN a.TERM > 72 THEN 'Ineligible: Term (' || a.TERM || ') > 72 Months'
+        WHEN a.AUTO_GROSS_LTV IS NULL THEN 'Ineligible: Missing LTV Data'
+        
+        -- Check LTV Math
         WHEN a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV > 2.00 THEN 'Ineligible: AL/AZ LTV > 200%'
-        
-        -- General LTV Check
         WHEN a.AUTO_GROSS_LTV < 1.00 THEN 'Ineligible: LTV < 100%'
         
         ELSE 'Eligible'
@@ -35,10 +58,8 @@ SELECT
     a.AUTO_GROSS_LTV,
     a.P_ADR_ST AS STATE_CODE,
     a.TERM
+
 FROM bdm.app_loan_production a
-WHERE 1=1 
-  -- CORE BUSINESS FILTER
-  AND a.CORE_V_CAPP = 'Core'
-  -- STATUS FILTER
+WHERE a.CORE_V_CAPP = 'Core'
   AND a.APPL_STAT = 'BOOK'
-  AND a.approved_flag = 'Y';
+  AND a.APPROVED_FLAG = 'Y';
