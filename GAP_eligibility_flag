@@ -1,0 +1,44 @@
+CREATE OR REPLACE TEMPORARY TABLE GAP_eligibility_flag AS
+SELECT 
+    a.UAI_ID,
+    a.OWN_SCORE_BRNCH,
+    -- 1. THE FLAG: Purely functional (Remains the same)
+    CASE 
+        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 1 
+             AND a.TERM <= 72  
+             AND (
+                 (a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV BETWEEN 1.00 AND 2.00) 
+                 OR 
+                 (a.P_ADR_ST NOT IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV >= 1.00)
+             )
+        THEN 1 ELSE 0 
+    END AS IS_GAP_ELIGIBLE,
+
+    -- 2. THE REASON: Sequenced by priority (Fixed for NULLs)
+    CASE 
+        -- Hard Exclusions First
+        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) = 0 THEN 'Ineligible: Unsecured / No Auto'
+        WHEN ZEROIFNULL(a.AUTO_NUM_COLLAT) > 1 THEN 'Ineligible: Multi-Vehicle'
+        WHEN a.TERM > 72 THEN 'Ineligible: Term > 72 Months'
+        WHEN a.AUTO_GROSS_LTV IS NULL THEN 'Ineligible: Missing LTV Data'  
+        
+        -- State-Specific LTV Checks
+        WHEN a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV < 1.00 THEN 'Ineligible: AL/AZ LTV < 100%'
+        WHEN a.P_ADR_ST IN ('AL', 'AZ') AND a.AUTO_GROSS_LTV > 2.00 THEN 'Ineligible: AL/AZ LTV > 200%'
+        
+        -- General LTV Check
+        WHEN a.AUTO_GROSS_LTV < 1.00 THEN 'Ineligible: LTV < 100%'
+        
+        ELSE 'Eligible'
+    END AS GAP_REASON,
+
+    a.AUTO_GROSS_LTV,
+    a.P_ADR_ST AS STATE_CODE,
+    a.TERM
+FROM bdm.app_loan_production a
+WHERE 1=1 
+  -- CORE BUSINESS FILTER
+  AND a.CORE_V_CAPP = 'Core'
+  -- STATUS FILTER
+  AND a.APPL_STAT = 'BOOK'
+  AND a.approved_flag = 'Y';
