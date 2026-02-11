@@ -62,3 +62,18 @@ WHERE a.CORE_V_CAPP = 'Core'
   AND a.APPL_STAT = 'BOOK'
   AND a.APPROVED_FLAG = 'Y'
   ;
+
+CREATE OR REPLACE TEMPORARY TABLE GAP_2025 AS
+SELECT 
+    a.*, 
+    gap.IS_GAP_ELIGIBLE,
+    gap.GAP_REASON,
+    gap.POTENTIAL_GAP_TYPE
+FROM bdm.app_loan_production a
+LEFT JOIN GAP_ELIGIBILITY_CORE gap
+    ON a.UAI_ID = gap.UAI_ID
+    AND a.OWN_SCORE_BRNCH = gap.OWN_SCORE_BRNCH
+WHERE a.CORE_V_CAPP = 'Core'
+  AND a.APPL_STAT = 'BOOK'
+  AND a.APPROVED_FLAG = 'Y'
+  AND a.contr_date between '2025-01-01' and '2025-12-31';
