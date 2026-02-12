@@ -5,19 +5,16 @@ SELECT
     a.ALPHA_TYPE,
     DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) AS BORROWER_AGE,
 
-    -- 1. THE FLAG: Strictly for the "Hard Gates" (Age, Term, State)
+    -- 1. THE FLAG: Strictly for the "Hard Gates"
     CASE 
         WHEN 
-            (
+            a.P_BIRTH_DT IS NOT NULL AND a.TERM IS NOT NULL AND a.P_ADR_ST IS NOT NULL
+            AND (
                 -- PATH A: The "Alpha Type" Footnote (Ages 18-75)
-                (
-                    a.ALPHA_TYPE IN ('Target_Alpha_1', 'Target_Alpha_2') 
-                    AND DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 75
-                )
+                (a.ALPHA_TYPE IN ('Target_Alpha_1', 'Target_Alpha_2') AND DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 75)
                 OR
-                -- PATH B: Standard Policy Ages per State Grid
-                (
-                    DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 
+                -- PATH B: Standard Policy Ages
+                (DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 
                     CASE 
                         WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
                         WHEN a.P_ADR_ST IN ('AZ','GA','MN','ND','VA') THEN 69
@@ -27,25 +24,17 @@ SELECT
                     END
                 )
             )
-            -- Term Wall (NH capped at 75mo, others generally 120mo)
             AND a.TERM <= CASE WHEN a.P_ADR_ST = 'NH' THEN 75 ELSE 120 END
         THEN 1 
         ELSE 0 
     END AS IS_SCL_ELIGIBLE,
 
-    -- 2. THE REASON: Hierarchical diagnosis of "0" flags
+    -- 2. THE SHORT REASON (Clean Categories for Charting)
     CASE 
-        -- Rule 1: Age Floor
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) < 18 THEN 'Ineligible: Under Age 18'
-        
-        -- Rule 2: Term Wall (Policy Hard-Stop)
-        WHEN a.P_ADR_ST = 'NH' AND a.TERM > 75 THEN 'Ineligible: NH Term > 75 Months'
-        WHEN a.TERM > 120 THEN 'Ineligible: Term > 120 Months'
-        
-        -- Rule 3: The "Alpha" vs "Standard" Age Wall
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 75 THEN 'Ineligible: Age > 75'
-        
-        -- Check if they failed the state-specific "Standard" age but aren't an Alpha type
+        WHEN a.P_BIRTH_DT IS NULL OR a.TERM IS NULL OR a.P_ADR_ST IS NULL THEN 'Missing Data'
+        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) < 18 THEN 'Age Under 18'
+        WHEN (a.P_ADR_ST = 'NH' AND a.TERM > 75) OR a.TERM > 120 THEN 'Term Exceeds Limit'
+        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 75 THEN 'Age Exceeds Max'
         WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 
              CASE 
                 WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
@@ -55,12 +44,33 @@ SELECT
                 ELSE 64 
              END
              AND a.ALPHA_TYPE NOT IN ('Target_Alpha_1', 'Target_Alpha_2') 
-             THEN 'Ineligible: Age Exceeds State Max (' || a.P_ADR_ST || ')'
-
+             THEN 'Age Exceeds Max'
         ELSE 'Eligible'
-    END AS SCL_REASON,
+    END AS SCL_SHORT_REASON,
 
-    -- 3. COVERAGE STATUS: Identifying "Under-Insured" (The Behavioral Driver)
+    -- 3. THE LONG REASON (Specific Details for Audit)
+    CASE 
+        WHEN a.P_BIRTH_DT IS NULL THEN 'Ineligible: Missing Birth Date'
+        WHEN a.TERM IS NULL THEN 'Ineligible: Missing Term Data'
+        WHEN a.P_ADR_ST IS NULL THEN 'Ineligible: Missing State Code'
+        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) < 18 THEN 'Ineligible: Under Age 18'
+        WHEN a.P_ADR_ST = 'NH' AND a.TERM > 75 THEN 'Ineligible: NH Term > 75 Months'
+        WHEN a.TERM > 120 THEN 'Ineligible: Term > 120 Months'
+        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 75 THEN 'Ineligible: Age > 75'
+        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 
+             CASE 
+                WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
+                WHEN a.P_ADR_ST IN ('AZ','GA','MN','ND','VA') THEN 69
+                WHEN a.P_ADR_ST IN ('CO','IN','KY','ME','MS','MT','NV','NY','OR','TN','WA') THEN 65
+                WHEN a.P_ADR_ST = 'SC' THEN 63
+                ELSE 64 
+             END
+             AND a.ALPHA_TYPE NOT IN ('Target_Alpha_1', 'Target_Alpha_2') 
+             THEN 'Ineligible: Age Exceeds State Max (' || NVL(a.P_ADR_ST, 'NULL') || ')'
+        ELSE 'Eligible'
+    END AS SCL_LONG_REASON,
+
+    -- 4. THE COVERAGE STATUS (The Value Driver)
     CASE 
         WHEN a.AMT_FIN > 
              CASE 
@@ -68,18 +78,15 @@ SELECT
                 WHEN a.P_ADR_ST = 'NY' THEN 55000
                 WHEN a.P_ADR_ST = 'VA' THEN 70000
                 WHEN a.P_ADR_ST = 'GA' THEN 75000
-                -- Footnote: Senior Alpha types capped at $25k
                 WHEN (a.ALPHA_TYPE IN ('Target_Alpha_1', 'Target_Alpha_2') AND DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 65) THEN 25000
                 ELSE 100000
              END THEN 'Under-Insured (Loan > Cap)'
         ELSE 'Fully Covered'
     END AS SCL_COVERAGE_STATUS,
 
-    a.AMT_FIN,
-    a.TERM,
-    a.P_ADR_ST AS STATE_CODE
-
+    a.AMT_FIN, a.TERM, a.P_ADR_ST AS STATE_CODE,
+    a.contr_date
 FROM bdm.app_loan_production a
-WHERE a.CORE_V_CAPP = 'Core'
-  AND a.APPL_STAT = 'BOOK'
-  AND a.APPROVED_FLAG = 'Y';
+WHERE a.CORE_V_CAPP = 'Core' AND a.APPL_STAT = 'BOOK' AND a.APPROVED_FLAG = 'Y';
+  
+  select is_scl_eligible, SCL_SHORT_REASON, count (*) from  SCL_Eligibility_Core where contr_date between '2025-01-01' and '2025-12-31' group by all; 
