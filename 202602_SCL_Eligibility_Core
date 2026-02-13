@@ -1,92 +1,63 @@
-CREATE OR REPLACE TEMPORARY TABLE SCL_Eligibility_Core AS
+CREATE OR REPLACE TEMPORARY TABLE SCL_2025 AS
+
+-- STEP 1: Deduplicate using Window Functions
+WITH Unique_SCL_Sales AS (
+    SELECT 
+        uai_id,
+        score_branch_no,
+        SALE_CT,
+        CANCEL_CT
+    FROM 
+        core.optional_product_sale
+    WHERE 
+        coverage_abbreviation_cd = 'SCL'
+        AND LOAN_ELIGIBLE = 'Y'
+    
+    -- "QUALIFY" filters the results of the window function directly
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY uai_id, score_branch_no
+        ORDER BY 
+            -- PRIORITY 1: Grab the row that shows a Sale (Don't pick the 0s!)
+            SALE_CT DESC, 
+            -- PRIORITY 2: Grab the row that shows a Cancel
+            CANCEL_CT DESC,
+            -- PRIORITY 3: If still tied, take the latest update
+            RECORD_UPDATE_TS DESC
+    ) = 1
+)
+
+-- STEP 2: Join 1-to-1 to Production (Same as before)
 SELECT 
-    a.UAI_ID,
-    a.OWN_SCORE_BRNCH,
-    a.ALPHA_TYPE,
-    DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) AS BORROWER_AGE,
-
-    -- 1. THE FLAG: Strictly for the "Hard Gates"
+    A.*, 
+    
     CASE 
-        WHEN 
-            a.P_BIRTH_DT IS NOT NULL AND a.TERM IS NOT NULL AND a.P_ADR_ST IS NOT NULL
-            AND (
-                -- PATH A: The "Alpha Type" Footnote (Ages 18-75)
-                (a.ALPHA_TYPE IN ('Target_Alpha_1', 'Target_Alpha_2') AND DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 75)
-                OR
-                -- PATH B: Standard Policy Ages
-                (DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) BETWEEN 18 AND 
+        WHEN ops.uai_id IS NULL THEN '1. Not Eligible'
+        ELSE 
+            CASE 
+                WHEN COALESCE(ops.SALE_CT, 0) = 0 THEN '2. Eligible - Waived'
+                WHEN ops.SALE_CT > 0 THEN
                     CASE 
-                        WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
-                        WHEN a.P_ADR_ST IN ('AZ','GA','MN','ND','VA') THEN 69
-                        WHEN a.P_ADR_ST IN ('CO','IN','KY','ME','MS','MT','NV','NY','OR','TN','WA') THEN 65
-                        WHEN a.P_ADR_ST = 'SC' THEN 63
-                        ELSE 64 
+                        WHEN COALESCE(ops.CANCEL_CT, 0) > 0 THEN '4. Sold - Canceled'
+                        ELSE '3. Sold - Active'
                     END
-                )
-            )
-            AND a.TERM <= CASE WHEN a.P_ADR_ST = 'NH' THEN 75 ELSE 120 END
-        THEN 1 
-        ELSE 0 
-    END AS IS_SCL_ELIGIBLE,
+            END
+    END AS SCL_LIFECYCLE_STATUS,
 
-    -- 2. THE SHORT REASON (Clean Categories for Charting)
-    CASE 
-        WHEN a.P_BIRTH_DT IS NULL OR a.TERM IS NULL OR a.P_ADR_ST IS NULL THEN 'Missing Data'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) < 18 THEN 'Age Under 18'
-        WHEN (a.P_ADR_ST = 'NH' AND a.TERM > 75) OR a.TERM > 120 THEN 'Term Exceeds Limit'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 75 THEN 'Age Exceeds Max'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 
-             CASE 
-                WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
-                WHEN a.P_ADR_ST IN ('AZ','GA','MN','ND','VA') THEN 69
-                WHEN a.P_ADR_ST IN ('CO','IN','KY','ME','MS','MT','NV','NY','OR','TN','WA') THEN 65
-                WHEN a.P_ADR_ST = 'SC' THEN 63
-                ELSE 64 
-             END
-             AND a.ALPHA_TYPE NOT IN ('Target_Alpha_1', 'Target_Alpha_2') 
-             THEN 'Age Exceeds Max'
-        ELSE 'Eligible'
-    END AS SCL_SHORT_REASON,
+    -- STRATEGIC FLAGS
+    CASE WHEN ops.uai_id IS NOT NULL THEN 1 ELSE 0 END AS IS_SCL_ELIGIBLE,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 THEN 1 ELSE 0 END AS IS_SCL_GROSS_SOLD,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 AND COALESCE(ops.CANCEL_CT, 0) = 0 THEN 1 ELSE 0 END AS IS_SCL_NET_SOLD,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 AND COALESCE(ops.CANCEL_CT, 0) > 0 THEN 1 ELSE 0 END AS IS_SCL_CANCELED
 
-    -- 3. THE LONG REASON (Specific Details for Audit)
-    CASE 
-        WHEN a.P_BIRTH_DT IS NULL THEN 'Ineligible: Missing Birth Date'
-        WHEN a.TERM IS NULL THEN 'Ineligible: Missing Term Data'
-        WHEN a.P_ADR_ST IS NULL THEN 'Ineligible: Missing State Code'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) < 18 THEN 'Ineligible: Under Age 18'
-        WHEN a.P_ADR_ST = 'NH' AND a.TERM > 75 THEN 'Ineligible: NH Term > 75 Months'
-        WHEN a.TERM > 120 THEN 'Ineligible: Term > 120 Months'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 75 THEN 'Ineligible: Age > 75'
-        WHEN DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 
-             CASE 
-                WHEN a.P_ADR_ST IN ('FL','MI','MO','NM','OK') THEN 70
-                WHEN a.P_ADR_ST IN ('AZ','GA','MN','ND','VA') THEN 69
-                WHEN a.P_ADR_ST IN ('CO','IN','KY','ME','MS','MT','NV','NY','OR','TN','WA') THEN 65
-                WHEN a.P_ADR_ST = 'SC' THEN 63
-                ELSE 64 
-             END
-             AND a.ALPHA_TYPE NOT IN ('Target_Alpha_1', 'Target_Alpha_2') 
-             THEN 'Ineligible: Age Exceeds State Max (' || NVL(a.P_ADR_ST, 'NULL') || ')'
-        ELSE 'Eligible'
-    END AS SCL_LONG_REASON,
+FROM 
+    bdm.app_loan_production A
+LEFT JOIN 
+    Unique_SCL_Sales ops
+    ON A.uai_id = ops.uai_id
+    AND CAST(A.own_score_brnch AS INT) = CAST(ops.score_branch_no AS INT)
 
-    -- 4. THE COVERAGE STATUS (The Value Driver)
-    CASE 
-        WHEN a.AMT_FIN > 
-             CASE 
-                WHEN a.P_ADR_ST = 'KY' THEN 40000
-                WHEN a.P_ADR_ST = 'NY' THEN 55000
-                WHEN a.P_ADR_ST = 'VA' THEN 70000
-                WHEN a.P_ADR_ST = 'GA' THEN 75000
-                WHEN (a.ALPHA_TYPE IN ('Target_Alpha_1', 'Target_Alpha_2') AND DATEDIFF('year', a.P_BIRTH_DT, a.CONTR_DATE) > 65) THEN 25000
-                ELSE 100000
-             END THEN 'Under-Insured (Loan > Cap)'
-        ELSE 'Fully Covered'
-    END AS SCL_COVERAGE_STATUS,
-
-    a.AMT_FIN, a.TERM, a.P_ADR_ST AS STATE_CODE,
-    a.contr_date
-FROM bdm.app_loan_production a
-WHERE a.CORE_V_CAPP = 'Core' AND a.APPL_STAT = 'BOOK' AND a.APPROVED_FLAG = 'Y';
-  
-  select is_scl_eligible, SCL_SHORT_REASON, count (*) from  SCL_Eligibility_Core where contr_date between '2025-01-01' and '2025-12-31' group by all; 
+WHERE 
+    A.CORE_V_CAPP = 'Core'
+    AND A.APPL_STAT = 'BOOK'
+    AND A.APPROVED_FLAG = 'Y'
+    AND A.contr_date BETWEEN '2025-01-01' AND '2025-12-31';
