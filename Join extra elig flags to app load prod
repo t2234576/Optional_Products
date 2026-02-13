@@ -1,0 +1,53 @@
+SELECT 
+    -- 1. Identifiers
+    A.UAI_ID,
+    
+    -- 2. Visual Check
+    A.OWN_SCORE_BRNCH AS prod_score,       -- Ex: '86'
+    SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4) AS strategy_raw, -- Ex: '0086'
+    
+    -- The Trimmed Version (What we are matching on)
+    LTRIM(SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4), '0') AS strategy_trimmed, -- Becomes '86'
+
+    -- 3. Logic Check (String Comparison)
+    CASE 
+        -- We handle the edge case where LTRIM returns empty '' (if the branch was '0000') by swapping it back to '0'
+        WHEN CAST(A.OWN_SCORE_BRNCH AS VARCHAR(50)) = 
+             CASE 
+                WHEN LTRIM(SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4), '0') = '' THEN '0'
+                ELSE LTRIM(SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4), '0') 
+             END
+        THEN 'MATCH'
+        ELSE 'MISMATCH'
+    END AS branch_validation_status
+
+FROM 
+    bdm.app_loan_production A
+JOIN 
+    sa.pl_acct_all_vol S
+    ON A.UAI_ID = S.UAI_ID
+
+-- FILTER: Show mismatches
+WHERE a.CORE_V_CAPP = 'Core' AND a.APPL_STAT = 'BOOK' AND a.APPROVED_FLAG = 'Y' and
+    CAST(A.OWN_SCORE_BRNCH AS VARCHAR(50)) <> 
+    CASE 
+        WHEN LTRIM(SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4), '0') = '' THEN '0'
+        ELSE LTRIM(SUBSTRING(CAST(S.APPLICATION_NBR AS VARCHAR(50)), 9, 4), '0') 
+    END;
+
+
+    select uai_id, APPLICATION_NBR, * from sa.pl_acct_all_vol where 1= 1 
+  -- and uai_id = '993330327518' 
+  and uai_id = '4497121024966'
+  limit 50; -- 5213 might be from APPLICATION_NBR: 0503334052131212; APPLICATION_NBR 0500834039671272 
+
+  select uai_id,OWN_SCORE_BRNCH, * from bdm.app_loan_production a 
+  WHERE a.CORE_V_CAPP = 'Core'
+  AND a.APPL_STAT = 'BOOK'
+  AND a.APPROVED_FLAG = 'Y'
+  --AND a.contr_date between '2025-01-01' and '2025-12-31'
+  -- and uai_id = '993330327518'
+  and uai_id = '4497121024966' -- 3728
+limit 50;
+
+-- my checking shows application_nbr does not hold true to do substring the branch number
