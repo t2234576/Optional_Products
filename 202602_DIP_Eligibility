@@ -1,0 +1,63 @@
+CREATE OR REPLACE TEMPORARY TABLE DIP_2025 AS
+
+-- STEP 1: Deduplicate using Window Functions (The "Best Row" Logic)
+WITH Unique_DIP_Sales AS (
+    SELECT 
+        uai_id,
+        score_branch_no,
+        SALE_CT,
+        CANCEL_CT
+    FROM 
+        core.optional_product_sale
+    WHERE 
+        coverage_abbreviation_cd = 'DIP'
+        AND LOAN_ELIGIBLE = 'Y'
+    
+    -- Filter to keep only the #1 ranked row per loan
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY uai_id, score_branch_no
+        ORDER BY 
+            SALE_CT DESC,           -- Priority 1: Pick the row that says "Sold"
+            CANCEL_CT DESC,         -- Priority 2: Pick the row that says "Canceled"
+            RECORD_UPDATE_TS DESC   -- Priority 3: Pick the newest update
+    ) = 1
+)
+
+-- STEP 2: Join to Production
+SELECT 
+    A.*, 
+    
+    CASE 
+        WHEN ops.uai_id IS NULL THEN '1. Not Eligible'
+        ELSE 
+            CASE 
+                WHEN COALESCE(ops.SALE_CT, 0) = 0 THEN '2. Eligible - Waived'
+                WHEN ops.SALE_CT > 0 THEN
+                    CASE 
+                        WHEN COALESCE(ops.CANCEL_CT, 0) > 0 THEN '4. Sold - Canceled'
+                        ELSE '3. Sold - Active'
+                    END
+            END
+    END AS DIP_LIFECYCLE_STATUS,
+
+    -- STRATEGIC FLAGS
+    CASE WHEN ops.uai_id IS NOT NULL THEN 1 ELSE 0 END AS IS_DIP_ELIGIBLE,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 THEN 1 ELSE 0 END AS IS_DIP_GROSS_SOLD,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 AND COALESCE(ops.CANCEL_CT, 0) = 0 THEN 1 ELSE 0 END AS IS_DIP_NET_SOLD,
+    CASE WHEN ops.uai_id IS NOT NULL AND ops.SALE_CT > 0 AND COALESCE(ops.CANCEL_CT, 0) > 0 THEN 1 ELSE 0 END AS IS_DIP_CANCELED
+
+FROM 
+    bdm.app_loan_production A
+LEFT JOIN 
+    Unique_DIP_Sales ops
+    ON A.uai_id = ops.uai_id
+    AND CAST(A.own_score_brnch AS INT) = CAST(ops.score_branch_no AS INT)
+
+WHERE 
+    A.CORE_V_CAPP = 'Core'
+    AND A.APPL_STAT = 'BOOK'
+    AND A.APPROVED_FLAG = 'Y'
+    AND A.contr_date BETWEEN '2025-01-01' AND '2025-12-31';
+
+
+    select DIP_lifecycle_status, count(*) from DIP_2025 group by all; 
