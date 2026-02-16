@@ -1,0 +1,116 @@
+CREATE OR REPLACE TABLE EDS.SB_COMMON.REF_SCL_LIMITS AS
+SELECT 
+    State_Name,
+    State_Abbr,
+    Max_Age_Std,       -- Standard Max Age (e.g., 64, 65, etc.)
+    Max_Amt_Std,       -- Standard Max Coverage Amount
+    Has_Alpha_Exception -- 'Y' if state allows Age 75 / $25k limit for specific loan types
+FROM (VALUES
+    -- STATE          ABBR   AGE   AMOUNT      ALPHA? (*)
+    ('Alabama',       'AL',  64,   100000,     'N'),
+    ('Arizona',       'AZ',  69,   100000,     'N'),
+    ('California',    'CA',  64,   100000,     'N'),
+    ('Colorado',      'CO',  65,   100000,     'Y'), -- Has *
+    ('Delaware',      'DE',  64,   100000,     'N'),
+    ('Florida',       'FL',  70,   100000,     'N'),
+    ('Georgia',       'GA',  69,    75000,     'N'), -- $75k Limit
+    ('Hawaii',        'HI',  64,   100000,     'N'),
+    ('Idaho',         'ID',  64,   100000,     'N'),
+    ('Illinois',      'IL',  64,   100000,     'N'),
+    ('Indiana',       'IN',  65,   100000,     'Y'), -- Has *
+    ('Iowa',          'IA',  64,   100000,     'N'),
+    ('Kansas',        'KS',  64,   100000,     'N'),
+    ('Kentucky',      'KY',  65,    40000,     'Y'), -- Has * and $40k Limit
+    ('Louisiana',     'LA',  64,   100000,     'N'),
+    ('Maine',         'ME',  65,   100000,     'Y'), -- Has *
+    ('Maryland',      'MD',  64,   100000,     'N'),
+    ('Massachusetts', 'MA',  65,   100000,     'N'), -- (Inferred standard if missing, but typically aligns with neighbors)
+    ('Michigan',      'MI',  70,   100000,     'N'),
+    ('Minnesota',     'MN',  69,   100000,     'N'),
+    ('Mississippi',   'MS',  65,   100000,     'N'),
+    ('Missouri',      'MO',  70,   100000,     'Y'), -- Has *
+    ('Montana',       'MT',  65,   100000,     'N'),
+    ('Nebraska',      'NE',  64,   100000,     'N'),
+    ('Nevada',        'NV',  65,   100000,     'N'),
+    ('New Hampshire', 'NH',  64,   100000,     'N'), -- Has ** (Term limit), not Alpha
+    ('New Jersey',    'NJ',  64,   100000,     'N'),
+    ('New Mexico',    'NM',  70,   100000,     'Y'), -- Has *
+    ('New York',      'NY',  65,    55000,     'N'), -- $55k Limit
+    ('North Carolina','NC',  64,   100000,     'N'),
+    ('North Dakota',  'ND',  69,   100000,     'N'),
+    ('Ohio',          'OH',  64,   100000,     'N'),
+    ('Oklahoma',      'OK',  70,   100000,     'N'), -- Has "" (likely typo or term note), treating as N
+    ('Oregon',        'OR',  65,   100000,     'N'),
+    ('Pennsylvania',  'PA',  64,   100000,     'N'),
+    ('South Carolina','SC',  63,   100000,     'N'), -- Age 63
+    ('South Dakota',  'SD',  64,   100000,     'Y'), -- Has *
+    ('Tennessee',     'TN',  65,   100000,     'Y'), -- Has *
+    ('Texas',         'TX',  64,   100000,     'N'),
+    ('Utah',          'UT',  64,   100000,     'Y'), -- Has *
+    ('Virginia',      'VA',  69,    70000,     'N'), -- $70k Limit
+    ('Washington',    'WA',  65,   100000,     'N'),
+    ('West Virginia', 'WV',  64,   100000,     'N'),
+    ('Wisconsin',     'WI',  64,   100000,     'Y'), -- Has *
+    ('Wyoming',       'WY',  64,   100000,     'N')
+) AS t (State_Name, State_Abbr, Max_Age_Std, Max_Amt_Std, Has_Alpha_Exception);
+
+/* SCL COMPLIANCE AUDIT - THE "BARE MINIMUM" CHECK */
+SELECT 
+    loan.uai_id,
+    loan.p_adr_st,
+    -- AGE CALCULATION
+    DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) AS Cust_Age,
+    loan.LOAN_AMT,
+    
+    -- RULES
+    rules.Max_Age_Std,
+    rules.Max_Amt_Std,
+    rules.Has_Alpha_Exception,
+
+    loan.ins_elig_life_yn,
+
+    CASE 
+        -- 1. STANDARD PASS
+        -- Customer is young enough AND loan is small enough for standard rules
+        WHEN DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) <= rules.Max_Age_Std 
+             AND loan.LOAN_AMT <= rules.Max_Amt_Std 
+        THEN 'Pass - Standard'
+
+        -- 2. ALPHA EXCEPTION PASS
+        -- State allows exception + Age is between Std and 75 + Loan is under $25k
+        WHEN rules.Has_Alpha_Exception = 'Y'
+             AND DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) > rules.Max_Age_Std 
+             AND DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) <= 75 
+             AND loan.LOAN_AMT <= 25000
+        THEN 'Pass - Alpha Exception'
+
+        -- 3. VIOLATIONS
+        ELSE 
+            CASE
+                -- A. Hard Age Violation (Over 75 OR Over Std in non-Alpha state)
+                WHEN DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) > 75 THEN 'VIOLATION: Over Absolute Max Age (75)'
+                WHEN DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) > rules.Max_Age_Std AND rules.Has_Alpha_Exception = 'N' THEN 'VIOLATION: Over Age Limit'
+                
+                -- B. Alpha Misuse (Right Age for Alpha, but Loan Amount too high)
+                WHEN rules.Has_Alpha_Exception = 'Y' 
+                     AND DATEDIFF(year, loan.P_BIRTH_DT, loan.CONTR_DATE) > rules.Max_Age_Std 
+                     AND loan.LOAN_AMT > 25000 
+                THEN 'VIOLATION: Alpha Age used, but Amount > $25k'
+
+                -- C. Standard Amount Violation
+                WHEN loan.LOAN_AMT > rules.Max_Amt_Std THEN 'VIOLATION: Over Standard Max Amount'
+                
+                ELSE 'Review Needed'
+            END
+    END AS Audit_Result
+
+FROM bdm.app_loan_production loan
+JOIN EDS.SB_COMMON.REF_SCL_LIMITS rules 
+    ON loan.p_adr_st = rules.State_Abbr
+where 1=1 
+  AND loan.CORE_V_CAPP = 'Core'
+  AND loan.APPL_STAT = 'BOOK'
+  AND loan.APPROVED_FLAG = 'Y'
+AND loan.contr_date BETWEEN '2025-01-01' AND '2025-12-31'
+AND Audit_Result  IN ( 'VIOLATION: Over Age Limit')
+ORDER BY Audit_Result;
