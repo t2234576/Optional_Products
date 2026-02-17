@@ -1,79 +1,90 @@
-drop  table State_Sales_Grid;
+-- ====================================================================
+-- CREATE TABLE: STATE PRODUCT AVAILABILITY GRID (STATE LEVEL)
+-- Purpose: Reference table for 'Theoretical Availability' by State
+-- Update: Added SSG (Silver Safeguard) placeholder
+-- ====================================================================
+
+DROP TABLE IF EXISTS State_Sales_Grid;
+
+-- ====================================================================
+-- CREATE TABLE: STATE PRODUCT AVAILABILITY GRID
+-- Updates: 
+--   1. DIP enabled for CA & KY (User Correction).
+--   2. SSG mapped from Creditor-Placed Auto (Page 2).
+--   3. GAP (OneMain Auto) & Bedrock disregarded.
+-- ====================================================================
+
+DROP TABLE IF EXISTS State_Sales_Grid;
+
 CREATE OR REPLACE TEMP TABLE State_Sales_Grid (
     State_Cd VARCHAR(2) PRIMARY KEY,
     
-    -- Credit Products (State Level Availability)
-    SCL_STATE_AVAIL CHAR(1),          -- Is Single Credit Life avail in this state?
-    SCL_MAX_AGE_STATE_AVAIL CHAR(1),  -- Is Over 65 Coverage avail in this state?
-    SCA_STATE_AVAIL CHAR(1),          -- Is Disability avail in this state?
-    IUI_STATE_AVAIL CHAR(1),          -- Is IUI avail in this state?
-    GAP_STATE_AVAIL CHAR(1),          -- Is GAP avail in this state?
-    GAP_STATE_TYPE VARCHAR(10),       -- 'Waiver' vs 'Insurance' for this state
+    -- Credit Products
+    SCL_STATE_AVAIL CHAR(1),          -- Life
+    SCL_MAX_AGE_STATE_AVAIL CHAR(1),  -- Life Over Max Age
+    SCA_STATE_AVAIL CHAR(1),          -- Disability (A&H)
+    IUI_STATE_AVAIL CHAR(1),          -- IUI
+    GAP_STATE_AVAIL CHAR(1),          -- GAP
+    GAP_STATE_TYPE VARCHAR(10),       -- 'Waiver' vs 'Insurance'
     
-    -- Non-Credit Products (State Level Availability)
-    ATL_STATE_AVAIL CHAR(1),          -- Is Auto Term Life avail in this state?
-    DIP_STATE_AVAIL CHAR(1),          -- Is Disability Income Plus avail in this state?
-    AUT_STATE_AVAIL CHAR(1),          -- Is Auto Plus/Security avail in this state?
-    HA_STATE_AVAIL  CHAR(1)           -- Is Home & Auto Plus avail in this state?
+    -- Non-Credit Products
+    ATL_STATE_AVAIL CHAR(1),          -- Auto Term Life
+    DIP_STATE_AVAIL CHAR(1),          -- Disability Income Plus
+    AUT_STATE_AVAIL CHAR(1),          -- Auto Plus / Security
+    HA_STATE_AVAIL  CHAR(1),          -- Home & Auto Plus
+    SSG_STATE_AVAIL CHAR(1),          -- Silver Safeguard (Creditor Placed Auto)
+    OMP_STATE_AVAIL CHAR(1)           -- OneMain Maintenance Plan (Placeholder)
 );
 
 INSERT INTO State_Sales_Grid VALUES
--- State | SCL | SCL >65 | SCA | IUI | GAP | GAP Type | ATL | DIP | AUT | HA
-('AL',   'Y',  'N',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('AZ',   'Y',  'N',      'Y',  'Y',  'Y',  'Insurance', 'N',  'N',  'Y',  'Y'),
-('CA',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'N',  'N',  'Y',  'Y'),
-('CO',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('DE',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'N',  'N',  'Y',  'Y'),
-('FL',   'Y',  'N',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('GA',   'Y',  'N',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('HI',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'N',  'N',  'Y',  'Y'),
-('ID',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('IL',   'Y',  'N',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('IN',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('IA',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'N',  'N',  'N',  'N'),
-('KS',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('KY',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('LA',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('ME',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'N',  'N'),
-('MD',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('MI',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('MN',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'N',  'N',  'N',  'N'),
-('MS',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'N'),
-('MO',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'N'),
-('MT',   'Y',  'N',      'Y',  'Y',  'N',   NULL,       'N',  'N',  'N',  'N'),
-('NE',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'N'),
-('NV',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'Y',  'N',  'Y',  'Y'),
-('NH',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'Y',  'N',  'Y',  'Y'),
-('NJ',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'Y',  'N',  'Y',  'Y'),
-('NM',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('NY',   'Y',  'N',      'Y',  'Y',  'N',   NULL,       'N',  'N',  'N',  'N'),
-('NC',   'Y',  'N',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'N'),
-('ND',   'Y',  'N',      'Y',  'Y',  'N',   NULL,       'N',  'N',  'N',  'Y'),
-('OH',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('OK',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('OR',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('PA',   'Y',  'N',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'N'),
-('SC',   'Y',  'N',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'N'),
-('SD',   'Y',  'N',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('TN',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('TX',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'N',  'N',  'Y',  'N'),
-('UT',   'Y',  'Y',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'N',  'N'),
-('VA',   'Y',  'N',      'Y',  'Y',  'Y',  'Insurance', 'Y',  'N',  'Y',  'Y'),
-('WA',   'Y',  'Y',      'Y',  'Y',  'N',   NULL,       'Y',  'N',  'Y',  'Y'),
-('WV',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'N',  'N'),
-('WI',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'Y',  'N',  'Y',  'Y'),
-('WY',   'Y',  'Y',      'Y',  'Y',  'Y',  'Waiver',    'N',  'N',  'N',  'N');
+-- State | SCL | SCL>65| SCA | IUI | GAP | Type      | ATL | DIP | AUT | HA | SSG | OMP
+('AL',   'Y',  'N',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('AZ',   'Y',  'N',    'Y',  'Y',  'Y',  'Insurance','N',  'N',  'Y',  'Y', 'Y',  'N'),
+('CA',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'N',  'Y',  'Y',  'Y', 'Y',  'N'), -- DIP='Y'
+('CO',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('DE',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'N',  'N',  'Y',  'Y', 'Y',  'N'),
+('FL',   'Y',  'N',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('GA',   'Y',  'N',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('HI',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','N',  'N',  'Y',  'Y', 'Y',  'N'),
+('ID',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('IL',   'Y',  'N',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('IN',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('IA',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'N',  'N',  'N',  'N', 'Y',  'N'),
+('KS',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('KY',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'Y',  'Y',  'Y', 'Y',  'N'), -- DIP='Y'
+('LA',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('ME',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'N',  'N', 'Y',  'N'),
+('MD',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('MI',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('MN',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','N',  'N',  'N',  'N', 'Y',  'N'),
+('MS',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'N', 'Y',  'N'),
+('MO',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'N', 'Y',  'N'),
+('MT',   'Y',  'N',    'Y',  'Y',  'N',   NULL,      'N',  'N',  'N',  'N', 'Y',  'N'),
+('NE',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'N', 'Y',  'N'),
+('NV',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'Y',  'N',  'Y',  'Y', 'N',  'N'),
+('NH',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('NJ',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('NM',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('NY',   'Y',  'N',    'Y',  'Y',  'N',   NULL,      'N',  'N',  'N',  'N', 'Y',  'N'),
+('NC',   'Y',  'N',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'N', 'Y',  'N'),
+('ND',   'Y',  'N',    'Y',  'Y',  'N',   NULL,      'N',  'N',  'N',  'Y', 'Y',  'N'),
+('OH',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('OK',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('OR',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('PA',   'Y',  'N',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'N', 'Y',  'N'),
+('SC',   'Y',  'N',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'N', 'Y',  'N'),
+('SD',   'Y',  'N',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'N',  'N'),
+('TN',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('TX',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'N',  'N',  'Y',  'N', 'Y',  'N'),
+('UT',   'Y',  'Y',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'N',  'N', 'Y',  'N'),
+('VA',   'Y',  'N',    'Y',  'Y',  'Y',  'Insurance','Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('WA',   'Y',  'Y',    'Y',  'Y',  'N',   NULL,      'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('WV',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'N',  'N', 'Y',  'N'),
+('WI',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'Y',  'N',  'Y',  'Y', 'Y',  'N'),
+('WY',   'Y',  'Y',    'Y',  'Y',  'Y',  'Waiver',   'N',  'N',  'N',  'N', 'N',  'N');
 
-select * from State_Sales_Grid;
-
-
--- ====================================================================
--- GAP ANALYSIS: ACTUAL PENETRATION vs. STATE AVAILABILITY
--- ====================================================================
-describe table optional_product_master;
--- ====================================================================
--- GAP ANALYSIS: STATE AVAILABILITY & TOTAL SALES PERFORMANCE
--- ====================================================================
+-- Verify updates
+SELECT * FROM State_Sales_Grid WHERE State_Cd IN ('CA', 'KY', 'NV', 'SD', 'WY');
 
 SELECT 
     A.P_ADR_ST,
@@ -156,7 +167,7 @@ SELECT
     END AS DIP_Penetration_Pct,
 
     -- 9. SSG (Silver Safeguard)
-    'Unknown' AS SSG_STATE_AVAIL, 
+    G.SSG_STATE_AVAIL AS SSG_STATE_AVAIL, 
     SUM(A.IS_SSG_NET_SOLD) AS SSG_Sold_Count,
     ROUND(SUM(A.IS_SSG_NET_SOLD) * 100.0 / NULLIF(COUNT(*), 0), 1) AS SSG_Penetration_Pct
 
@@ -174,7 +185,8 @@ GROUP BY
     G.AUT_STATE_AVAIL,
     G.HA_STATE_AVAIL,
     G.ATL_STATE_AVAIL,
-    G.DIP_STATE_AVAIL
+    G.DIP_STATE_AVAIL,
+    G.SSG_STATE_AVAIL
 
 ORDER BY 
     Total_Booked_Loans DESC;
