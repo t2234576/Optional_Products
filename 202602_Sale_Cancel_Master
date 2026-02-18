@@ -1682,4 +1682,239 @@ WHERE IS_DIP_CANCELED = 1
 GROUP BY 1, 2, 3, 4;
 
 
-describe table optional_product_master
+describe table optional_product_master;
+
+-- ====================================================================
+-- MASTER PIVOT: CANCEL DRIVERS (Risk, Type, Channel, Initiator)
+-- Logic: Transforms Raw Closing Method into 'BRANCH' vs 'ONLINE'
+-- ====================================================================
+
+SELECT 
+    '1. SCL' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    
+    -- TRANSFORMATION APPLIED HERE
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+
+    CASE 
+        WHEN IS_SCL_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(SCL_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    
+    -- Timing Buckets
+    SUM(IS_SCL_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_SCL_CANCEL_WITHIN_60DAYS) - SUM(IS_SCL_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_SCL_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+
+FROM optional_product_master A
+WHERE IS_SCL_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '2. SCA' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_SCA_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(SCA_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_SCA_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_SCA_CANCEL_WITHIN_60DAYS) - SUM(IS_SCA_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_SCA_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_SCA_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '3. IUI' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_IUI_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(IUI_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_IUI_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_IUI_CANCEL_WITHIN_60DAYS) - SUM(IS_IUI_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_IUI_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_IUI_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '4. GAP' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_GAP_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(GAP_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_GAP_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_GAP_CANCEL_WITHIN_60DAYS) - SUM(IS_GAP_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_GAP_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_GAP_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '8. AUT' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_AUT_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(AUT_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_AUT_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_AUT_CANCEL_WITHIN_60DAYS) - SUM(IS_AUT_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_AUT_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_AUT_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '5. HA' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_HA_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(HA_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_HA_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_HA_CANCEL_WITHIN_60DAYS) - SUM(IS_HA_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_HA_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_HA_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '6. ATL' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_ATL_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(ATL_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_ATL_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_ATL_CANCEL_WITHIN_60DAYS) - SUM(IS_ATL_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_ATL_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_ATL_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '7. SSG' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_SSG_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(SSG_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_SSG_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_SSG_CANCEL_WITHIN_60DAYS) - SUM(IS_SSG_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_SSG_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_SSG_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5
+
+UNION ALL
+
+SELECT 
+    '9. DIP' AS Product,
+    COALESCE(A.RSK_LVL, 'Unknown') AS RSK_LVL,
+    COALESCE(A.CUST_TYPE, 'Unknown') AS Customer_Type,
+    CASE 
+        WHEN UPPER(A.CLOSING_METHOD) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+        WHEN UPPER(A.CLOSING_METHOD) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+        WHEN A.CLOSING_METHOD IS NULL THEN 'OTHER'
+        ELSE UPPER(A.CLOSING_METHOD)
+    END AS Closing_Channel,
+    CASE 
+        WHEN IS_DIP_CUSTOMER_INITIATED_CANCEL = 1 THEN 'Customer' 
+        ELSE 'OneMain/Policy' 
+    END AS Cancel_Initiator,
+    COUNT(*) AS Total_Canceled,
+    ROUND(AVG(DIP_DAYS_TO_CANCEL), 1) AS Avg_Days_To_Cancel,
+    SUM(IS_DIP_CANCEL_WITHIN_30DAYS) AS Cancel_0_30_Days,
+    (SUM(IS_DIP_CANCEL_WITHIN_60DAYS) - SUM(IS_DIP_CANCEL_WITHIN_30DAYS)) AS Cancel_31_60_Days,
+    (COUNT(*) - SUM(IS_DIP_CANCEL_WITHIN_60DAYS)) AS Cancel_Beyond_60_Days
+FROM optional_product_master A
+WHERE IS_DIP_CANCELED = 1
+GROUP BY 1, 2, 3, 4, 5;
