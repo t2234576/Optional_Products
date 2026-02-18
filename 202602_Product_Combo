@@ -1,0 +1,54 @@
+-- ====================================================================
+-- BUNDLING ANALYSIS: MASTER TABLE (UNPIVOT + LISTAGG)
+-- Logic: Turn columns back into rows -> Filter 1s -> Aggregate
+-- ====================================================================
+
+WITH Unpivoted_Sales AS (
+    -- Manually unpivot the Master Table. 
+    -- We only grab rows where the Net Sold Flag is specifically 1.
+    
+    SELECT uai_id, 'SCL' AS Product_Code FROM optional_product_master WHERE IS_SCL_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'SCA' AS Product_Code FROM optional_product_master WHERE IS_SCA_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'IUI' AS Product_Code FROM optional_product_master WHERE IS_IUI_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'GAP' AS Product_Code FROM optional_product_master WHERE IS_GAP_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'AUT' AS Product_Code FROM optional_product_master WHERE IS_AUT_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'HA'  AS Product_Code FROM optional_product_master WHERE IS_HA_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'ATL' AS Product_Code FROM optional_product_master WHERE IS_ATL_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'SSG' AS Product_Code FROM optional_product_master WHERE IS_SSG_NET_SOLD = 1
+    -- DIP Excluded
+),
+
+Loan_Bundles AS (
+    SELECT 
+        uai_id,
+        
+        -- Build the Name using LISTAGG (Snowflake/Oracle/Redshift)
+        -- If SQL Server/BigQuery, change to STRING_AGG(Product_Code, ' + ')
+        LISTAGG(Product_Code, ' + ') WITHIN GROUP (ORDER BY Product_Code) AS Bundle_Name,
+        
+        -- Calculate Count from the rows, or use Length Logic
+        COUNT(*) AS Product_Count
+        
+    FROM Unpivoted_Sales
+    GROUP BY uai_id
+)
+
+-- Final Output
+SELECT 
+    Bundle_Name,
+    Product_Count,
+    COUNT(*) AS Total_Loans,
+    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER(), 2) AS Pct_of_Total_Sales
+FROM Loan_Bundles
+GROUP BY 1, 2
+having product_count > 1
+ORDER BY Total_Loans DESC
+;
+
