@@ -52,3 +52,69 @@ having product_count > 1
 ORDER BY Total_Loans DESC
 ;
 
+
+WITH Product_Sales AS (
+    -- 1. Unpivot to get a clean list of 'Loan X bought Product Y'
+    SELECT uai_id, 'SCL' AS Product FROM optional_product_master WHERE IS_SCL_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'SCA' FROM optional_product_master WHERE IS_SCA_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'IUI' FROM optional_product_master WHERE IS_IUI_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'GAP' FROM optional_product_master WHERE IS_GAP_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'AUT' FROM optional_product_master WHERE IS_AUT_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'HA'  FROM optional_product_master WHERE IS_HA_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'ATL' FROM optional_product_master WHERE IS_ATL_NET_SOLD = 1
+    UNION ALL
+    SELECT uai_id, 'SSG' FROM optional_product_master WHERE IS_SSG_NET_SOLD = 1
+),
+
+Total_Loans AS (
+    -- Get the total universe size (for probability calc)
+    SELECT COUNT(DISTINCT uai_id) AS N FROM optional_product_master
+),
+
+Pair_Counts AS (
+    -- 2. Self-Join to find pairs (A & B bought together)
+    SELECT 
+        A.Product AS Product_A,
+        B.Product AS Product_B,
+        COUNT(DISTINCT A.uai_id) AS Pair_Count
+    FROM Product_Sales A
+    JOIN Product_Sales B ON A.uai_id = B.uai_id AND A.Product < B.Product -- Avoid duplicates (A-B vs B-A)
+    GROUP BY 1, 2
+),
+
+Single_Counts AS (
+    -- 3. Get individual counts for A and B
+    SELECT Product, COUNT(DISTINCT uai_id) AS Single_Count
+    FROM Product_Sales
+    GROUP BY 1
+)
+
+-- 4. Final Calculation
+SELECT 
+    P.Product_A,
+    P.Product_B,
+    P.Pair_Count AS Co_Occurrences,
+    
+    -- Metrics
+    ROUND((P.Pair_Count * 1.0 / T.N) * 100, 2) AS Attach_Rate_Both_Pct,
+    
+    -- The "Lift" Calculation
+    -- (Prob(A&B)) / (Prob(A) * Prob(B))
+    -- Simplified: (Pair_Count * N) / (Count(A) * Count(B))
+    ROUND(
+        (P.Pair_Count * T.N * 1.0) / (S1.Single_Count * S2.Single_Count), 
+        2
+    ) AS Lift_Score
+
+FROM Pair_Counts P
+CROSS JOIN Total_Loans T
+JOIN Single_Counts S1 ON P.Product_A = S1.Product
+JOIN Single_Counts S2 ON P.Product_B = S2.Product
+
+ORDER BY Lift_Score DESC;
