@@ -1,0 +1,61 @@
+WITH Full_History_With_Lag AS (
+    -- Step 1: Calculate the entire sequence dynamically for all time
+    SELECT 
+        uai_id,
+        thread_acct_key,
+        
+        -- Standardize the Channel
+        CASE 
+            WHEN UPPER(TRIM(CLOSING_METHOD)) IN ('KIOSK', 'BRANCH') THEN 'BRANCH'
+            WHEN UPPER(TRIM(CLOSING_METHOD)) IN ('ONLINE', 'REMOTE') THEN 'ONLINE'
+            ELSE 'OTHER' 
+        END AS Closing_Channel,
+
+        -- 1. Flag if THIS loan has an OP
+        CASE WHEN (COALESCE(IS_SCL_NET_SOLD, 0) + COALESCE(IS_SCA_NET_SOLD, 0) + 
+                   COALESCE(IS_IUI_NET_SOLD, 0) + COALESCE(IS_GAP_NET_SOLD, 0) + 
+                   COALESCE(IS_AUT_NET_SOLD, 0) + COALESCE(IS_HA_NET_SOLD, 0) + 
+                   COALESCE(IS_ATL_NET_SOLD, 0) + COALESCE(IS_DIP_NET_SOLD, 0) + 
+                   COALESCE(IS_SSG_NET_SOLD, 0)) > 0 
+        THEN 1 ELSE 0 END AS Has_OP_Current,
+
+        -- 2. Look back at the PREVIOUS loan in the thread and grab its OP Flag
+        LAG(
+            CASE WHEN (COALESCE(IS_SCL_NET_SOLD, 0) + COALESCE(IS_SCA_NET_SOLD, 0) + 
+                       COALESCE(IS_IUI_NET_SOLD, 0) + COALESCE(IS_GAP_NET_SOLD, 0) + 
+                       COALESCE(IS_AUT_NET_SOLD, 0) + COALESCE(IS_HA_NET_SOLD, 0) + 
+                       COALESCE(IS_ATL_NET_SOLD, 0) + COALESCE(IS_DIP_NET_SOLD, 0) + 
+                       COALESCE(IS_SSG_NET_SOLD, 0)) > 0 
+            THEN 1 ELSE 0 END
+        ) OVER(PARTITION BY thread_acct_key ORDER BY contr_date ASC) AS Has_OP_Previous,
+
+        -- 3. Number the loans (1 = Their very first loan ever)
+        ROW_NUMBER() OVER(PARTITION BY thread_acct_key ORDER BY contr_date ASC) AS Life_Seq
+
+    FROM optional_product_master_full
+)
+
+-- Step 2: Join this perfectly sequenced history back to your 2025 Master
+SELECT 
+    m25.CUST_TYPE,
+    hist.Closing_Channel,
+    
+    CASE 
+        -- NET NEW (Life_Seq = 1 means this is absolutely their first loan in our history)
+        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 1 THEN '1. Net New - Acquired'
+        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 0 THEN '2. Net New - Missed'
+        
+        -- RETURNING (Life_Seq > 1 means they have a history)
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 1 AND hist.Has_OP_Current = 1 THEN '3. Returning - Loyalist (Retained)'
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 0 AND hist.Has_OP_Current = 1 THEN '4. Returning - Convert (Win-Back/Upsell)'
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 1 AND hist.Has_OP_Current = 0 THEN '5. Returning - Churner (Leakage)'
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 0 AND hist.Has_OP_Current = 0 THEN '6. Returning - Hard No (Consistent)'
+    END AS Customer_Journey_Bucket,
+
+    COUNT(m25.uai_id) AS Loan_Volume
+
+FROM optional_product_master m25
+-- strictly link the 2025 loan to its historical fingerprint
+JOIN Full_History_With_Lag hist ON m25.uai_id = hist.uai_id 
+GROUP BY 1, 2, 3
+ORDER BY 1, 2, 3;
