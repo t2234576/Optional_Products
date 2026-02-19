@@ -1,7 +1,7 @@
 -- Use CREATE OR REPLACE TEMPORARY TABLE if your SQL environment supports it, 
 -- or just CREATE OR REPLACE TABLE to make it a permanent analytical base.
 
-CREATE OR REPLACE TABLE optional_product_journey_2025 AS
+CREATE OR REPLACE TEMP TABLE optional_product_journey_2025 AS
 
 WITH Full_History_With_Lag AS (
     -- Step 1: Calculate the entire chronological sequence dynamically for all time
