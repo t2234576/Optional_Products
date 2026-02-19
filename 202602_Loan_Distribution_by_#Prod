@@ -65,3 +65,80 @@ FROM Gross_Distribution G
 FULL OUTER JOIN Net_Distribution N 
     ON G.Bucket = N.Bucket
 ORDER BY 1 ASC;
+
+
+WITH Product_Counts_Per_Loan AS (
+    SELECT 
+        -- Gross Product Calculation
+        (COALESCE(IS_SCL_GROSS_SOLD, 0) + COALESCE(IS_SCA_GROSS_SOLD, 0) + 
+         COALESCE(IS_IUI_GROSS_SOLD, 0) + COALESCE(IS_GAP_GROSS_SOLD, 0) + 
+         COALESCE(IS_AUT_GROSS_SOLD, 0) + COALESCE(IS_HA_GROSS_SOLD, 0) + 
+         COALESCE(IS_ATL_GROSS_SOLD, 0) + COALESCE(IS_DIP_GROSS_SOLD, 0) + 
+         COALESCE(IS_SSG_GROSS_SOLD, 0)) AS Gross_Count,
+         
+        -- Net Product Calculation
+        (COALESCE(IS_SCL_NET_SOLD, 0) + COALESCE(IS_SCA_NET_SOLD, 0) + 
+         COALESCE(IS_IUI_NET_SOLD, 0) + COALESCE(IS_GAP_NET_SOLD, 0) + 
+         COALESCE(IS_AUT_NET_SOLD, 0) + COALESCE(IS_HA_NET_SOLD, 0) + 
+         COALESCE(IS_ATL_NET_SOLD, 0) + COALESCE(IS_DIP_NET_SOLD, 0) + 
+         COALESCE(IS_SSG_NET_SOLD, 0)) AS Net_Count
+    FROM optional_product_master
+),
+
+Final_Distribution AS (
+    SELECT 
+        -- Expanded CASE statement for labeling
+        CASE 
+            WHEN Gross_Count = 0 THEN 'a. 0 Products'
+            WHEN Gross_Count = 1 THEN 'b. 1 Product'
+            WHEN Gross_Count = 2 THEN 'c. 2 Products'
+            WHEN Gross_Count = 3 THEN 'd. 3 Products'
+            WHEN Gross_Count = 4 THEN 'e. 4 Products'
+            WHEN Gross_Count = 5 THEN 'f. 5 Products'
+            WHEN Gross_Count = 6 THEN 'g. 6 Products'
+            WHEN Gross_Count = 7 THEN 'h. 7 Products'
+            WHEN Gross_Count = 8 THEN 'i. 8 Products'
+            WHEN Gross_Count = 9 THEN 'j. 9 Products'
+            ELSE 'k. 10+ Products' -- Safety fallback
+        END AS Product_Label,
+        
+        -- Logic to count both buckets in one pass
+        COUNT(CASE WHEN Gross_Count IS NOT NULL THEN 1 END) AS Gross_Loans,
+        
+        -- We apply the same label logic to Net_Count for the join
+        SUM(CASE WHEN Net_Count = 0 AND Gross_Count = 0 THEN 1 ELSE 0 END) as Placeholder_Logic -- Simplified below
+    FROM Product_Counts_Per_Loan
+    GROUP BY 1
+)
+
+-- CLEANER VERSION FOR TABULAR OUTPUT:
+SELECT 
+    Bucket_Label,
+    SUM(Gross_Volume) AS Gross_Loan_Count,
+    SUM(Net_Volume) AS Net_Loan_Count
+FROM (
+    SELECT 
+        CASE 
+            WHEN Gross_Count = 0 THEN 'a. 0 Products' WHEN Gross_Count = 1 THEN 'b. 1 Product'
+            WHEN Gross_Count = 2 THEN 'c. 2 Products' WHEN Gross_Count = 3 THEN 'd. 3 Products'
+            WHEN Gross_Count = 4 THEN 'e. 4 Products' WHEN Gross_Count = 5 THEN 'f. 5 Products'
+            WHEN Gross_Count = 6 THEN 'g. 6 Products' WHEN Gross_Count = 7 THEN 'h. 7 Products'
+            WHEN Gross_Count = 8 THEN 'i. 8 Products' WHEN Gross_Count = 9 THEN 'j. 9 Products'
+        END AS Bucket_Label,
+        1 AS Gross_Volume, 0 AS Net_Volume
+    FROM Product_Counts_Per_Loan
+    UNION ALL
+    SELECT 
+        CASE 
+            WHEN Net_Count = 0 THEN 'a. 0 Products' WHEN Net_Count = 1 THEN 'b. 1 Product'
+            WHEN Net_Count = 2 THEN 'c. 2 Products' WHEN Net_Count = 3 THEN 'd. 3 Products'
+            WHEN Net_Count = 4 THEN 'e. 4 Products' WHEN Net_Count = 5 THEN 'f. 5 Products'
+            WHEN Net_Count = 6 THEN 'g. 6 Products' WHEN Net_Count = 7 THEN 'h. 7 Products'
+            WHEN Net_Count = 8 THEN 'i. 8 Products' WHEN Net_Count = 9 THEN 'j. 9 Products'
+        END AS Bucket_Label,
+        0 AS Gross_Volume, 1 AS Net_Volume
+    FROM Product_Counts_Per_Loan
+) Combined
+GROUP BY 1
+ORDER BY 1 ASC;
+
