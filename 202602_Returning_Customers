@@ -1,3 +1,9 @@
+-- ====================================================================
+-- at loan level
+-- cust_type can change from FC to PC intra year 2025
+-- cust journey can change intra year 2025
+-- ====================================================================
+
 WITH Full_History_With_Lag AS (
     -- Step 1: Calculate the entire sequence dynamically for all time
     SELECT 
@@ -59,3 +65,70 @@ FROM optional_product_master m25
 JOIN Full_History_With_Lag hist ON m25.uai_id = hist.uai_id 
 GROUP BY 1, 2, 3
 ORDER BY 1, 2, 3;
+
+-- ====================================================================
+-- at the cust level
+-- do not look at changes intra year
+-- ====================================================================
+WITH Customer_2025_Summary AS (
+    -- Step 1: Find the LAST loan they took in 2025 to determine their end-of-year state
+    SELECT 
+        thread_acct_key,
+        -- Rank descending to make their final 2025 loan #1
+        ROW_NUMBER() OVER(PARTITION BY thread_acct_key ORDER BY contr_date DESC) as Reverse_2025_Seq,
+        
+        -- Flag if this final 2025 loan had an OP
+        CASE WHEN (COALESCE(IS_SCL_NET_SOLD, 0) + COALESCE(IS_SCA_NET_SOLD, 0) + 
+                   COALESCE(IS_IUI_NET_SOLD, 0) + COALESCE(IS_GAP_NET_SOLD, 0) + 
+                   COALESCE(IS_AUT_NET_SOLD, 0) + COALESCE(IS_HA_NET_SOLD, 0) + 
+                   COALESCE(IS_ATL_NET_SOLD, 0) + COALESCE(IS_DIP_NET_SOLD, 0) + 
+                   COALESCE(IS_SSG_NET_SOLD, 0)) > 0 THEN 1 ELSE 0 END AS Final_2025_Has_OP
+                   
+    FROM optional_product_master
+    WHERE EXTRACT(YEAR FROM contr_date) = 2025
+),
+
+Customer_History_Summary AS (
+    -- Step 2: Establish their entire history BEFORE 2025
+    SELECT 
+        thread_acct_key,
+        -- Did their very first loan ever happen in 2025?
+        MIN(EXTRACT(YEAR FROM contr_date)) AS First_Loan_Year,
+        
+        -- Did they EVER buy an OP prior to Jan 1, 2025?
+        MAX(CASE 
+            WHEN EXTRACT(YEAR FROM contr_date) < 2025 AND 
+                 (COALESCE(IS_SCL_NET_SOLD, 0) + COALESCE(IS_SCA_NET_SOLD, 0) + 
+                  COALESCE(IS_IUI_NET_SOLD, 0) + COALESCE(IS_GAP_NET_SOLD, 0) + 
+                  COALESCE(IS_AUT_NET_SOLD, 0) + COALESCE(IS_HA_NET_SOLD, 0) + 
+                  COALESCE(IS_ATL_NET_SOLD, 0) + COALESCE(IS_DIP_NET_SOLD, 0) + 
+                  COALESCE(IS_SSG_NET_SOLD, 0)) > 0 
+            THEN 1 ELSE 0 
+        END) AS Had_OP_Before_2025
+
+    FROM optional_product_master_full
+    GROUP BY 1
+)
+
+-- Step 3: Join and bucket at the UNIQUE CUSTOMER level
+SELECT 
+    CASE 
+        -- NET NEW (Their very first loan was in 2025)
+        WHEN H.First_Loan_Year = 2025 AND C.Final_2025_Has_OP = 0 THEN '1. Net New - Missed'
+        WHEN H.First_Loan_Year = 2025 AND C.Final_2025_Has_OP = 1 THEN '2. Net New - Acquired'
+        
+        -- RETURNING (They had history prior to 2025)
+        WHEN H.First_Loan_Year < 2025 AND H.Had_OP_Before_2025 = 0 AND C.Final_2025_Has_OP = 1 THEN '3. Returning - Convert (Win-Back/Upsell)'
+        WHEN H.First_Loan_Year < 2025 AND H.Had_OP_Before_2025 = 1 AND C.Final_2025_Has_OP = 1 THEN '4. Returning - Loyalist (Retained)'
+        WHEN H.First_Loan_Year < 2025 AND H.Had_OP_Before_2025 = 1 AND C.Final_2025_Has_OP = 0 THEN '5. Returning - Churner (Leakage)'
+        WHEN H.First_Loan_Year < 2025 AND H.Had_OP_Before_2025 = 0 AND C.Final_2025_Has_OP = 0 THEN '6. Returning - Hard No (Consistent)'
+    END AS Customer_Level_Bucket,
+    
+    -- This counts unique people, not transactions
+    COUNT(DISTINCT C.thread_acct_key) AS Unique_Customers
+
+FROM Customer_2025_Summary C
+JOIN Customer_History_Summary H ON C.thread_acct_key = H.thread_acct_key
+WHERE C.Reverse_2025_Seq = 1 -- Crucial: Only evaluates their FINAL state in 2025
+GROUP BY 1
+ORDER BY 1 ASC;
