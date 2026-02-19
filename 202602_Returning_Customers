@@ -42,12 +42,12 @@ SELECT
     
     CASE 
         -- NET NEW (Life_Seq = 1 means this is absolutely their first loan in our history)
-        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 1 THEN '1. Net New - Acquired'
-        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 0 THEN '2. Net New - Missed'
+        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 1 THEN '2. Net New - Acquired'
+        WHEN hist.Life_Seq = 1 AND hist.Has_OP_Current = 0 THEN '1. Net New - Missed'
         
         -- RETURNING (Life_Seq > 1 means they have a history)
-        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 1 AND hist.Has_OP_Current = 1 THEN '3. Returning - Loyalist (Retained)'
-        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 0 AND hist.Has_OP_Current = 1 THEN '4. Returning - Convert (Win-Back/Upsell)'
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 1 AND hist.Has_OP_Current = 1 THEN '4. Returning - Loyalist (Retained)'
+        WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 0 AND hist.Has_OP_Current = 1 THEN '3. Returning - Convert (Win-Back/Upsell)'
         WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 1 AND hist.Has_OP_Current = 0 THEN '5. Returning - Churner (Leakage)'
         WHEN hist.Life_Seq > 1 AND hist.Has_OP_Previous = 0 AND hist.Has_OP_Current = 0 THEN '6. Returning - Hard No (Consistent)'
     END AS Customer_Journey_Bucket,
