@@ -143,3 +143,14 @@ SELECT
 FROM optional_product_journey_2025
 GROUP BY 1
 ORDER BY 1 ASC;
+
+
+-- ====================================================================
+-- At customer level, use this to do customer waterfall walk
+-- ====================================================================
+SELECT 
+    Customer_Level_Bucket,
+    COUNT(DISTINCT thread_acct_key) AS Unique_Customers
+FROM optional_product_journey_2025
+GROUP BY 1
+ORDER BY 1;
