@@ -1,0 +1,67 @@
+WITH Product_Counts_Per_Loan AS (
+    SELECT 
+        -- Assuming 1 row = 1 loan. We sum the flags across the row to get products per loan.
+        -- Calculate GROSS products on the loan
+        (COALESCE(IS_SCL_GROSS_SOLD, 0) + 
+         COALESCE(IS_SCA_GROSS_SOLD, 0) + 
+         COALESCE(IS_IUI_GROSS_SOLD, 0) + 
+         COALESCE(IS_GAP_GROSS_SOLD, 0) + 
+         COALESCE(IS_AUT_GROSS_SOLD, 0) + 
+         COALESCE(IS_HA_GROSS_SOLD, 0) + 
+         COALESCE(IS_ATL_GROSS_SOLD, 0) + 
+         COALESCE(IS_DIP_GROSS_SOLD, 0) + 
+         COALESCE(IS_SSG_GROSS_SOLD, 0)) AS Gross_Count,
+         
+        -- Calculate NET products on the loan (after cancellations)
+        (COALESCE(IS_SCL_NET_SOLD, 0) + 
+         COALESCE(IS_SCA_NET_SOLD, 0) + 
+         COALESCE(IS_IUI_NET_SOLD, 0) + 
+         COALESCE(IS_GAP_NET_SOLD, 0) + 
+         COALESCE(IS_AUT_NET_SOLD, 0) + 
+         COALESCE(IS_HA_NET_SOLD, 0) + 
+         COALESCE(IS_ATL_NET_SOLD, 0) + 
+         COALESCE(IS_DIP_NET_SOLD, 0) + 
+         COALESCE(IS_SSG_NET_SOLD, 0)) AS Net_Count
+
+    FROM optional_product_master
+),
+
+-- Aggregate the Gross distribution
+Gross_Distribution AS (
+    SELECT 
+        CASE 
+            WHEN Gross_Count = 0 THEN 'a. 0 Products'
+            WHEN Gross_Count = 1 THEN 'b. 1 Product'
+            WHEN Gross_Count = 2 THEN 'c. 2 Products'
+            WHEN Gross_Count = 3 THEN 'd. 3 Products'
+            ELSE 'e. 4+ Products' 
+        END AS Bucket,
+        COUNT(*) AS Loans_Gross_Volume
+    FROM Product_Counts_Per_Loan
+    GROUP BY 1
+),
+
+-- Aggregate the Net distribution
+Net_Distribution AS (
+    SELECT 
+        CASE 
+            WHEN Net_Count = 0 THEN 'a. 0 Products'
+            WHEN Net_Count = 1 THEN 'b. 1 Product'
+            WHEN Net_Count = 2 THEN 'c. 2 Products'
+            WHEN Net_Count = 3 THEN 'd. 3 Products'
+            ELSE 'e. 4+ Products' 
+        END AS Bucket,
+        COUNT(*) AS Loans_Net_Volume
+    FROM Product_Counts_Per_Loan
+    GROUP BY 1
+)
+
+-- Join them together for a clean final table
+SELECT 
+    COALESCE(G.Bucket, N.Bucket) AS Product_Bucket,
+    COALESCE(G.Loans_Gross_Volume, 0) AS Loans_Gross_Volume,
+    COALESCE(N.Loans_Net_Volume, 0) AS Loans_Net_Volume
+FROM Gross_Distribution G
+FULL OUTER JOIN Net_Distribution N 
+    ON G.Bucket = N.Bucket
+ORDER BY 1 ASC;
