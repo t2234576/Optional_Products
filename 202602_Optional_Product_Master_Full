@@ -539,24 +539,3 @@ WHERE
     AND A.APPL_STAT = 'BOOK'
     AND A.APPROVED_FLAG = 'Y';
 
--- ====================================================================
--- PHASE 2.2: 2025 CUSTOMER ROLLUP (NET SALES LOGIC)
--- ====================================================================
-CREATE OR REPLACE TEMP TABLE temp_customer_2025_rollup AS
-SELECT 
-    thread_acct_key,
-    
-    -- Grab the historical vintage stamps (MIN or MAX works exactly the same here)
-    MIN(CUSTOMER_VINTAGE_YEAR) AS Cust_Vintage_Year, 
-    MIN(ANY_OPT_PROD_VINTAGE_YEAR) AS First_OP_Vintage_Year,
-    
-    -- Roll up 2025 buying behavior (1 if they KEPT the product on ANY loan this year)
-    MAX(CASE WHEN 
-             IS_SCL_NET_SOLD = 1 OR IS_SCA_NET_SOLD = 1 OR IS_IUI_NET_SOLD = 1 OR 
-             IS_GAP_NET_SOLD = 1 OR IS_AUT_NET_SOLD = 1 OR IS_HA_NET_SOLD = 1 OR 
-             IS_ATL_NET_SOLD = 1 OR IS_SSG_NET_SOLD = 1 OR IS_DIP_NET_SOLD = 1
-        THEN 1 ELSE 0 END) AS Bought_In_2025_Flag
-        
-FROM optional_product_master_full
-WHERE EXTRACT(YEAR FROM contr_date) = 2025 
-GROUP BY 1;
