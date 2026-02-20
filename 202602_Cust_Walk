@@ -1,0 +1,72 @@
+
+-- ====================================================================
+-- THE 2025 MASTER WATERFALL: AT-BATS TO NET COVERED
+-- ====================================================================
+WITH Master_Aggregation AS (
+    SELECT 
+        thread_acct_key,
+        CUSTOMER_VINTAGE_YEAR,
+        -- Force NULL vintages to 2025 (Frontbook)
+        -- COALESCE(CUSTOMER_VINTAGE_YEAR, 2025) AS Safe_Vintage,
+        
+        -- Flag 1: Did they say YES at the desk? (Gross)
+        MAX(CASE WHEN 
+             IS_SCL_GROSS_SOLD = 1 OR IS_SCA_GROSS_SOLD = 1 OR IS_IUI_GROSS_SOLD = 1 OR 
+             IS_GAP_GROSS_SOLD = 1 OR IS_AUT_GROSS_SOLD = 1 OR IS_HA_GROSS_SOLD = 1 OR 
+             IS_ATL_GROSS_SOLD = 1 OR IS_SSG_GROSS_SOLD = 1 OR IS_DIP_GROSS_SOLD = 1
+            THEN 1 ELSE 0 END) AS Is_Gross_Winner,
+
+        -- Flag 2: Did they KEEP it? (Net)
+        MAX(CASE WHEN 
+             IS_SCL_NET_SOLD = 1 OR IS_SCA_NET_SOLD = 1 OR IS_IUI_NET_SOLD = 1 OR 
+             IS_GAP_NET_SOLD = 1 OR IS_AUT_NET_SOLD = 1 OR IS_HA_NET_SOLD = 1 OR 
+             IS_ATL_NET_SOLD = 1 OR IS_SSG_NET_SOLD = 1 OR IS_DIP_NET_SOLD = 1
+            THEN 1 ELSE 0 END) AS Is_Net_Winner
+    FROM optional_product_master_full
+    WHERE EXTRACT(YEAR FROM contr_date) = 2025 
+    GROUP BY 1,2
+)
+
+-- 1. Backbook At-Bats
+SELECT '1. Backbook Traffic (At-Bats)' AS Step, SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR < 2025 THEN 1 ELSE 0 END) AS Value, 1 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 2. Frontbook At-Bats
+SELECT '2. Frontbook Traffic (At-Bats)' AS Step, SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR >= 2025 THEN 1 ELSE 0 END) AS Value, 2 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 3. TOTAL 2025 TRAFFIC (The 1.1M Peak)
+SELECT '3. Subtotal: Total 2025 Traffic' AS Step, COUNT(*) AS Value, 3 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 4. Drop in Engagement (Gross Misses)
+-- (People who said NO to everything at the desk)
+SELECT '4. Drop in Engagement (Gross Misses)' AS Step, SUM(CASE WHEN Is_Gross_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 4 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 5. GROSS COVERED (The 670k Subtotal)
+SELECT '5. Subtotal: Gross Covered' AS Step, SUM(Is_Gross_Winner) AS Value, 5 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 6. Drop in Cancel (The 71k Leakage)
+-- (People who said YES but then cancelled everything)
+SELECT '6. Drop in Cancel (Leakage)' AS Step, SUM(CASE WHEN Is_Gross_Winner = 1 AND Is_Net_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 6 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 7. NET COVERED (The 598k Final Result)
+SELECT '7. FINAL: NET COVERED BASE' AS Step, SUM(Is_Net_Winner) AS Value, 7 AS Sort
+FROM Master_Aggregation
+
+ORDER BY Sort;
