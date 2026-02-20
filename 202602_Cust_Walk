@@ -81,3 +81,5 @@ SELECT '7. FINAL: NET COVERED BASE' AS Step, SUM(Is_Net_Winner) AS Value, 9 AS S
 FROM Master_Aggregation
 
 ORDER BY Sort;
+
+
