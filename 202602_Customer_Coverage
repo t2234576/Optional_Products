@@ -97,3 +97,138 @@ FROM standardized_op_journey_2025
 WHERE Customer_Cohort = 'Backbook'
 GROUP BY 1
 ORDER BY 1 DESC; -- Puts Veterans on top
+
+WITH Product_Level_Rollup AS (
+    SELECT 
+        thread_acct_key,
+        
+        -- The crucial Backbook filter mechanism
+        MIN(CUSTOMER_VINTAGE_YEAR) AS Cust_Vintage_Year,
+        
+        -- 1. SCL
+        MAX(CASE WHEN EXTRACT(YEAR FROM SCL_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_SCL_Prior,
+        MAX(CASE WHEN IS_SCL_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_SCL_2025,
+        
+        -- 2. SCA
+        MAX(CASE WHEN EXTRACT(YEAR FROM SCA_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_SCA_Prior,
+        MAX(CASE WHEN IS_SCA_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_SCA_2025,
+        
+        -- 3. IUI
+        MAX(CASE WHEN EXTRACT(YEAR FROM IUI_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_IUI_Prior,
+        MAX(CASE WHEN IS_IUI_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_IUI_2025,
+
+        -- 4. GAP
+        MAX(CASE WHEN EXTRACT(YEAR FROM GAP_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_GAP_Prior,
+        MAX(CASE WHEN IS_GAP_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_GAP_2025,
+
+        -- 5. AUT
+        MAX(CASE WHEN EXTRACT(YEAR FROM AUT_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_AUT_Prior,
+        MAX(CASE WHEN IS_AUT_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_AUT_2025,
+
+        -- 6. HA
+        MAX(CASE WHEN EXTRACT(YEAR FROM HA_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_HA_Prior,
+        MAX(CASE WHEN IS_HA_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_HA_2025,
+
+        -- 7. ATL
+        MAX(CASE WHEN EXTRACT(YEAR FROM ATL_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_ATL_Prior,
+        MAX(CASE WHEN IS_ATL_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_ATL_2025,
+
+        -- 8. SSG
+        MAX(CASE WHEN EXTRACT(YEAR FROM SSG_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_SSG_Prior,
+        MAX(CASE WHEN IS_SSG_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_SSG_2025,
+
+        -- 9. DIP
+        MAX(CASE WHEN EXTRACT(YEAR FROM DIP_VINTAGE_DT) < 2025 THEN 1 ELSE 0 END) AS Had_DIP_Prior,
+        MAX(CASE WHEN IS_DIP_NET_SOLD = 1 THEN 1 ELSE 0 END) AS Bought_DIP_2025
+
+    FROM optional_product_master_full
+    WHERE EXTRACT(YEAR FROM contr_date) = 2025
+    GROUP BY 1
+)
+
+-- ====================================================================
+-- THE AGGREGATION: BACKBOOK VETERANS VS. BACKBOOK NON-VETERANS BY PRODUCT TYPE
+-- ====================================================================
+
+-- 1. SCL
+SELECT '1. SCL' AS Product_Type,
+    COUNT(CASE WHEN Had_SCL_Prior = 1 THEN thread_acct_key END) AS Veteran_At_Bats,
+    ROUND(SUM(CASE WHEN Had_SCL_Prior = 1 AND Bought_SCL_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SCL_Prior = 1 THEN thread_acct_key END), 0) * 100, 1) AS Veteran_Win_Rate_Pct,
+    
+    COUNT(CASE WHEN Had_SCL_Prior = 0 THEN thread_acct_key END) AS Baseline_At_Bats,
+    ROUND(SUM(CASE WHEN Had_SCL_Prior = 0 AND Bought_SCL_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SCL_Prior = 0 THEN thread_acct_key END), 0) * 100, 1) AS Baseline_Win_Rate_Pct
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 2. SCA
+SELECT '2. SCA',
+    COUNT(CASE WHEN Had_SCA_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_SCA_Prior = 1 AND Bought_SCA_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SCA_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_SCA_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_SCA_Prior = 0 AND Bought_SCA_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SCA_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 3. IUI
+SELECT '3. IUI',
+    COUNT(CASE WHEN Had_IUI_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_IUI_Prior = 1 AND Bought_IUI_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_IUI_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_IUI_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_IUI_Prior = 0 AND Bought_IUI_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_IUI_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 4. GAP
+SELECT '4. GAP',
+    COUNT(CASE WHEN Had_GAP_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_GAP_Prior = 1 AND Bought_GAP_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_GAP_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_GAP_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_GAP_Prior = 0 AND Bought_GAP_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_GAP_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 5. AUT
+SELECT '5. AUT',
+    COUNT(CASE WHEN Had_AUT_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_AUT_Prior = 1 AND Bought_AUT_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_AUT_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_AUT_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_AUT_Prior = 0 AND Bought_AUT_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_AUT_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 6. HA
+SELECT '6. HA',
+    COUNT(CASE WHEN Had_HA_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_HA_Prior = 1 AND Bought_HA_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_HA_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_HA_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_HA_Prior = 0 AND Bought_HA_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_HA_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 7. ATL
+SELECT '7. ATL',
+    COUNT(CASE WHEN Had_ATL_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_ATL_Prior = 1 AND Bought_ATL_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_ATL_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_ATL_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_ATL_Prior = 0 AND Bought_ATL_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_ATL_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 8. SSG
+SELECT '8. SSG',
+    COUNT(CASE WHEN Had_SSG_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_SSG_Prior = 1 AND Bought_SSG_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SSG_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_SSG_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_SSG_Prior = 0 AND Bought_SSG_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_SSG_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+UNION ALL
+-- 9. DIP
+SELECT '9. DIP',
+    COUNT(CASE WHEN Had_DIP_Prior = 1 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_DIP_Prior = 1 AND Bought_DIP_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_DIP_Prior = 1 THEN thread_acct_key END), 0) * 100, 1),
+    COUNT(CASE WHEN Had_DIP_Prior = 0 THEN thread_acct_key END),
+    ROUND(SUM(CASE WHEN Had_DIP_Prior = 0 AND Bought_DIP_2025 = 1 THEN 1 ELSE 0 END) / NULLIF(COUNT(CASE WHEN Had_DIP_Prior = 0 THEN thread_acct_key END), 0) * 100, 1)
+FROM Product_Level_Rollup WHERE Cust_Vintage_Year < 2025
+
+ORDER BY Product_Type;
