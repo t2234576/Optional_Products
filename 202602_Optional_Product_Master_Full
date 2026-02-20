@@ -12,48 +12,49 @@ SELECT
     EXTRACT(YEAR FROM MIN(A.contr_date) OVER (PARTITION BY A.thread_acct_key)) AS CUSTOMER_VINTAGE_YEAR,
 
     -- ================================================================
-    -- 2. ANY OPTIONAL PRODUCT VINTAGE (When did they first say 'Yes' to ANYTHING?)
+    -- 2. ANY OPTIONAL PRODUCT VINTAGE (First time they KEPT a product)
     -- ================================================================
     MIN(CASE WHEN 
-        COALESCE(SCL.IS_SCL_GROSS_SOLD, 0) = 1 OR
-        COALESCE(SCA.IS_SCA_GROSS_SOLD, 0) = 1 OR
-        COALESCE(IUI.IS_IUI_GROSS_SOLD, 0) = 1 OR
-        COALESCE(GAP.IS_GAP_GROSS_SOLD, 0) = 1 OR
-        COALESCE(AUT.IS_AUT_GROSS_SOLD, 0) = 1 OR
-        COALESCE(HA.IS_HA_GROSS_SOLD, 0) = 1 OR
-        COALESCE(ATL.IS_ATL_GROSS_SOLD, 0) = 1 OR
-        COALESCE(SSG.IS_SSG_GROSS_SOLD, 0) = 1 OR
-        COALESCE(DIP.IS_DIP_GROSS_SOLD, 0) = 1 
+        COALESCE(SCL.IS_SCL_NET_SOLD, 0) = 1 OR
+        COALESCE(SCA.IS_SCA_NET_SOLD, 0) = 1 OR
+        COALESCE(IUI.IS_IUI_NET_SOLD, 0) = 1 OR
+        COALESCE(GAP.IS_GAP_NET_SOLD, 0) = 1 OR
+        COALESCE(AUT.IS_AUT_NET_SOLD, 0) = 1 OR
+        COALESCE(HA.IS_HA_NET_SOLD, 0) = 1 OR
+        COALESCE(ATL.IS_ATL_NET_SOLD, 0) = 1 OR
+        COALESCE(SSG.IS_SSG_NET_SOLD, 0) = 1 OR
+        COALESCE(DIP.IS_DIP_NET_SOLD, 0) = 1 
     THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS ANY_OPT_PROD_VINTAGE_DT,
     
     EXTRACT(YEAR FROM MIN(CASE WHEN 
-        COALESCE(SCL.IS_SCL_GROSS_SOLD, 0) = 1 OR
-        COALESCE(SCA.IS_SCA_GROSS_SOLD, 0) = 1 OR
-        COALESCE(IUI.IS_IUI_GROSS_SOLD, 0) = 1 OR
-        COALESCE(GAP.IS_GAP_GROSS_SOLD, 0) = 1 OR
-        COALESCE(AUT.IS_AUT_GROSS_SOLD, 0) = 1 OR
-        COALESCE(HA.IS_HA_GROSS_SOLD, 0) = 1 OR
-        COALESCE(ATL.IS_ATL_GROSS_SOLD, 0) = 1 OR
-        COALESCE(SSG.IS_SSG_GROSS_SOLD, 0) = 1 OR
-        COALESCE(DIP.IS_DIP_GROSS_SOLD, 0) = 1 
+        COALESCE(SCL.IS_SCL_NET_SOLD, 0) = 1 OR
+        COALESCE(SCA.IS_SCA_NET_SOLD, 0) = 1 OR
+        COALESCE(IUI.IS_IUI_NET_SOLD, 0) = 1 OR
+        COALESCE(GAP.IS_GAP_NET_SOLD, 0) = 1 OR
+        COALESCE(AUT.IS_AUT_NET_SOLD, 0) = 1 OR
+        COALESCE(HA.IS_HA_NET_SOLD, 0) = 1 OR
+        COALESCE(ATL.IS_ATL_NET_SOLD, 0) = 1 OR
+        COALESCE(SSG.IS_SSG_NET_SOLD, 0) = 1 OR
+        COALESCE(DIP.IS_DIP_NET_SOLD, 0) = 1 
     THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key)) AS ANY_OPT_PROD_VINTAGE_YEAR,
 
     -- ================================================================
-    -- 3. PRODUCT-SPECIFIC VINTAGES (When did they first buy THIS specific product?)
+    -- 3. PRODUCT-SPECIFIC VINTAGES (First time they kept THIS product)
     -- ================================================================
-    MIN(CASE WHEN COALESCE(SCL.IS_SCL_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SCL_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(SCA.IS_SCA_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SCA_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(IUI.IS_IUI_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS IUI_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(GAP.IS_GAP_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS GAP_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(AUT.IS_AUT_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS AUT_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(HA.IS_HA_GROSS_SOLD, 0) = 1  THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS HA_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(ATL.IS_ATL_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS ATL_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(SSG.IS_SSG_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SSG_VINTAGE_DT,
-    MIN(CASE WHEN COALESCE(DIP.IS_DIP_GROSS_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS DIP_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(SCL.IS_SCL_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SCL_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(SCA.IS_SCA_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SCA_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(IUI.IS_IUI_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS IUI_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(GAP.IS_GAP_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS GAP_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(AUT.IS_AUT_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS AUT_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(HA.IS_HA_NET_SOLD, 0) = 1  THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS HA_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(ATL.IS_ATL_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS ATL_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(SSG.IS_SSG_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS SSG_VINTAGE_DT,
+    MIN(CASE WHEN COALESCE(DIP.IS_DIP_NET_SOLD, 0) = 1 THEN A.contr_date END) OVER (PARTITION BY A.thread_acct_key) AS DIP_VINTAGE_DT,
 
     -- ================================================================
-    -- EXISTING SCL, SCA, IUI, ETC. COLUMNS BELOW
+    -- EXISTING SCL, SCA, IUI, ETC. COLUMNS
     -- ================================================================
+    
     -- SCL
     COALESCE(SCL.IS_SCL_ELIGIBLE, 0)   AS IS_SCL_ELIGIBLE,
     COALESCE(SCL.IS_SCL_GROSS_SOLD, 0) AS IS_SCL_GROSS_SOLD,
@@ -503,6 +504,7 @@ SELECT
     DIP.DIP_LOAN_ELIGIBLE,
     DIP.DIP_CPL_DT,
     DIP.DIP_INCENTIVE_EMPLOYEE_ID
+
 FROM 
     bdm.app_loan_production A
     -- Join SCL
@@ -536,3 +538,25 @@ WHERE
     A.CORE_V_CAPP = 'Core'
     AND A.APPL_STAT = 'BOOK'
     AND A.APPROVED_FLAG = 'Y';
+
+    -- ====================================================================
+-- PHASE 2.2: 2025 CUSTOMER ROLLUP (NET SALES LOGIC)
+-- ====================================================================
+CREATE OR REPLACE TEMP TABLE temp_customer_2025_rollup AS
+SELECT 
+    thread_acct_key,
+    
+    -- Grab the historical vintage stamps
+    MAX(CUSTOMER_VINTAGE_YEAR) AS Cust_Vintage_Year, 
+    MAX(ANY_OPT_PROD_VINTAGE_YEAR) AS First_OP_Vintage_Year,
+    
+    -- Roll up 2025 buying behavior (1 if they KEPT the product on ANY loan this year)
+    MAX(CASE WHEN 
+             IS_SCL_NET_SOLD = 1 OR IS_SCA_NET_SOLD = 1 OR IS_IUI_NET_SOLD = 1 OR 
+             IS_GAP_NET_SOLD = 1 OR IS_AUT_NET_SOLD = 1 OR IS_HA_NET_SOLD = 1 OR 
+             IS_ATL_NET_SOLD = 1 OR IS_SSG_NET_SOLD = 1 OR IS_DIP_NET_SOLD = 1
+        THEN 1 ELSE 0 END) AS Bought_In_2025_Flag
+        
+FROM optional_product_master_full
+WHERE EXTRACT(YEAR FROM contr_date) = 2025 
+GROUP BY 1;
