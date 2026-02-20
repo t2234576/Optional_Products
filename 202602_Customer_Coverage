@@ -1,0 +1,99 @@
+-- ====================================================================
+-- STANDARDIZED 2025 OPTIONAL PRODUCT CUSTOMER JOURNEY
+-- ====================================================================
+CREATE OR REPLACE TEMP TABLE standardized_op_journey_2025 AS
+WITH Customer_2025_Rollup AS (
+    SELECT 
+        thread_acct_key,
+        
+        -- Grab the historical vintage stamps
+        -- (MIN is used to pull the pre-calculated vintage through the GROUP BY)
+        MIN(CUSTOMER_VINTAGE_YEAR) AS Cust_Vintage_Year, 
+        MIN(ANY_OPT_PROD_VINTAGE_YEAR) AS First_OP_Vintage_Year,
+        
+        -- Did they say YES at the desk? (Gross Sales Logic)
+        MAX(CASE WHEN 
+             IS_SCL_GROSS_SOLD = 1 OR IS_SCA_GROSS_SOLD = 1 OR IS_IUI_GROSS_SOLD = 1 OR 
+             IS_GAP_GROSS_SOLD = 1 OR IS_AUT_GROSS_SOLD = 1 OR IS_HA_GROSS_SOLD = 1 OR 
+             IS_ATL_GROSS_SOLD = 1 OR IS_SSG_GROSS_SOLD = 1 OR IS_DIP_GROSS_SOLD = 1
+            THEN 1 ELSE 0 END) AS Is_Gross_Winner_2025,
+
+        -- Did they KEEP a product in 2025? (Net Sales Logic)
+        MAX(CASE WHEN 
+             IS_SCL_NET_SOLD = 1 OR IS_SCA_NET_SOLD = 1 OR IS_IUI_NET_SOLD = 1 OR 
+             IS_GAP_NET_SOLD = 1 OR IS_AUT_NET_SOLD = 1 OR IS_HA_NET_SOLD = 1 OR 
+             IS_ATL_NET_SOLD = 1 OR IS_SSG_NET_SOLD = 1 OR IS_DIP_NET_SOLD = 1
+            THEN 1 ELSE 0 END) AS Is_Net_Winner_2025
+            
+    FROM optional_product_master_full
+    WHERE EXTRACT(YEAR FROM contr_date) = 2025 
+    GROUP BY 1
+)
+
+SELECT 
+    thread_acct_key,
+    
+    -- Safely handle any NULL vintages by forcing them to 2025 (Frontbook)
+    COALESCE(Cust_Vintage_Year, 2025) AS Safe_Cust_Vintage_Year,
+    First_OP_Vintage_Year,
+    
+    -- The core 2025 behavior flags
+    Is_Gross_Winner_2025,
+    Is_Net_Winner_2025,
+    
+    -- High-Level Cohort Split (Frontbook vs. Backbook)
+    CASE 
+        WHEN COALESCE(Cust_Vintage_Year, 2025) >= 2025 THEN 'Frontbook'
+        ELSE 'Backbook'
+    END AS Customer_Cohort,
+
+    -- Detailed Behavioral Bucketing (The 6-Bucket Executive View)
+    CASE 
+        -- FRONTBOOK
+        WHEN COALESCE(Cust_Vintage_Year, 2025) >= 2025 THEN
+            CASE 
+                WHEN Is_Net_Winner_2025 = 1 THEN '2. Net New - Acquired'
+                ELSE '1. Net New - Missed'
+            END
+            
+        -- BACKBOOK
+        WHEN Cust_Vintage_Year < 2025 THEN
+            CASE 
+                WHEN Is_Net_Winner_2025 = 1 THEN
+                    CASE 
+                        WHEN First_OP_Vintage_Year < 2025 THEN '4. Returning - Loyalist (Retained)'
+                        ELSE '3. Returning - Convert (Win-Back/Upsell)' 
+                    END
+                ELSE 
+                    CASE 
+                        WHEN First_OP_Vintage_Year < 2025 THEN '5. Returning - Churner (Leakage)'
+                        ELSE '6. Returning - Hard No (Consistent)'
+                    END
+            END
+    END AS Customer_Level_Bucket,
+
+    -- The Strategic Deep-Dive: Veteran OP User vs. First-Time OP User
+    CASE 
+        WHEN First_OP_Vintage_Year < 2025 THEN 'Veteran OP User (Familiar)'
+        ELSE 'First-Time OP User (Unfamiliar)'
+    END AS OP_Familiarity_Status
+
+FROM Customer_2025_Rollup;
+
+-- ====================================================================
+-- STRATEGIC AUDIT: BACKBOOK COVERAGE BY PRODUCT FAMILIARITY
+-- ====================================================================
+SELECT 
+    OP_Familiarity_Status AS Backbook_Customer_Type,
+    
+    -- Traffic and Wins
+    COUNT(DISTINCT thread_acct_key) AS Total_At_Bats,
+    SUM(Is_Net_Winner_2025) AS Net_Wins,
+    
+    -- The True Net Coverage Rate
+    ROUND(SUM(Is_Net_Winner_2025) / COUNT(DISTINCT thread_acct_key) * 100, 1) AS Net_Coverage_Pct
+
+FROM standardized_op_journey_2025
+WHERE Customer_Cohort = 'Backbook'
+GROUP BY 1
+ORDER BY 1 DESC; -- Puts Veterans on top
