@@ -1,17 +1,19 @@
+-- ====================================================================
+-- THE 2025 MASTER WATERFALL: FULL VINTAGE SPLIT
+-- ====================================================================
 WITH Master_Aggregation AS (
     SELECT 
         thread_acct_key,
-        -- Force NULL vintages to 2025 (Frontbook) to ensure 0 nulls in final walk
         CUSTOMER_VINTAGE_YEAR,
         
-        -- Flag 1: Did they say YES at the desk? (Gross)
+        -- Flag 1: Desk Sale (Gross)
         MAX(CASE WHEN 
              IS_SCL_GROSS_SOLD = 1 OR IS_SCA_GROSS_SOLD = 1 OR IS_IUI_GROSS_SOLD = 1 OR 
              IS_GAP_GROSS_SOLD = 1 OR IS_AUT_GROSS_SOLD = 1 OR IS_HA_GROSS_SOLD = 1 OR 
              IS_ATL_GROSS_SOLD = 1 OR IS_SSG_GROSS_SOLD = 1 OR IS_DIP_GROSS_SOLD = 1
             THEN 1 ELSE 0 END) AS Is_Gross_Winner,
 
-        -- Flag 2: Did they KEEP it? (Net)
+        -- Flag 2: Realized Sale (Net)
         MAX(CASE WHEN 
              IS_SCL_NET_SOLD = 1 OR IS_SCA_NET_SOLD = 1 OR IS_IUI_NET_SOLD = 1 OR 
              IS_GAP_NET_SOLD = 1 OR IS_AUT_NET_SOLD = 1 OR IS_HA_NET_SOLD = 1 OR 
@@ -22,54 +24,60 @@ WITH Master_Aggregation AS (
     GROUP BY 1, 2
 )
 
--- 1. Backbook At-Bats
+-- 1. Backbook Traffic
 SELECT '1. Backbook Traffic (At-Bats)' AS Step, SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR < 2025 THEN 1 ELSE 0 END) AS Value, 1 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 2. Frontbook At-Bats
+-- 2. Frontbook Traffic
 SELECT '2. Frontbook Traffic (At-Bats)' AS Step, SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR >= 2025 THEN 1 ELSE 0 END) AS Value, 2 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 3. TOTAL 2025 TRAFFIC
+-- 3. TOTAL FOOTPRINT PEAK
 SELECT '3. Subtotal: Total 2025 Traffic' AS Step, COUNT(*) AS Value, 3 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 4. Drop in Engagement (Gross Misses)
-SELECT '4. Drop in Engagement (Gross Misses)' AS Step, SUM(CASE WHEN Is_Gross_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 4 AS Sort
+-- 4a. Drop in Engagement - BACKBOOK (Misses)
+SELECT '4a. Backbook Engagement Miss' AS Step, 
+       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR < 2025 AND Is_Gross_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 4 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 5. GROSS COVERED (The "Desk Win")
-SELECT '5. Subtotal: Gross Covered' AS Step, SUM(Is_Gross_Winner) AS Value, 5 AS Sort
+-- 4b. Drop in Engagement - FRONTBOOK (Misses)
+SELECT '4b. Frontbook Engagement Miss' AS Step, 
+       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR >= 2025 AND Is_Gross_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 5 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 6a. Drop in Cancel - BACKBOOK
-SELECT '6a. Drop in Cancel (Backbook Leakage)' AS Step, 
-       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR < 2025 AND Is_Gross_Winner = 1 AND Is_Net_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 
-       6 AS Sort
+-- 5. GROSS COVERED
+SELECT '5. Subtotal: Gross Covered' AS Step, SUM(Is_Gross_Winner) AS Value, 6 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 6b. Drop in Cancel - FRONTBOOK
-SELECT '6b. Drop in Cancel (Frontbook Leakage)' AS Step, 
-       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR >= 2025 AND Is_Gross_Winner = 1 AND Is_Net_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 
-       7 AS Sort
+-- 6a. Drop in Cancel - BACKBOOK (Leakage)
+SELECT '6a. Backbook Cancellation' AS Step, 
+       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR < 2025 AND Is_Gross_Winner = 1 AND Is_Net_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 7 AS Sort
 FROM Master_Aggregation
 
 UNION ALL
 
--- 7. NET COVERED (The Final Reality)
-SELECT '7. FINAL: NET COVERED BASE' AS Step, SUM(Is_Net_Winner) AS Value, 8 AS Sort
+-- 6b. Drop in Cancel - FRONTBOOK (Leakage)
+SELECT '6b. Frontbook Cancellation' AS Step, 
+       SUM(CASE WHEN CUSTOMER_VINTAGE_YEAR >= 2025 AND Is_Gross_Winner = 1 AND Is_Net_Winner = 0 THEN 1 ELSE 0 END) * -1 AS Value, 8 AS Sort
+FROM Master_Aggregation
+
+UNION ALL
+
+-- 7. FINAL NET COVERED
+SELECT '7. FINAL: NET COVERED BASE' AS Step, SUM(Is_Net_Winner) AS Value, 9 AS Sort
 FROM Master_Aggregation
 
 ORDER BY Sort;
