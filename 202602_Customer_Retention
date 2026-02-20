@@ -154,3 +154,27 @@ SELECT
 FROM optional_product_journey_2025
 GROUP BY 1
 ORDER BY 1;
+-- ====================================================================
+-- At customer level, use this to do product penetration by customer type
+-- ====================================================================
+SELECT 
+    CASE 
+        WHEN Customer_Level_Bucket IN ('1. Net New - Missed', '2. Net New - Acquired') 
+            THEN '1. Net New Customers'
+        WHEN Customer_Level_Bucket IN ('3. Returning - Convert (Win-Back/Upsell)', '4. Returning - Loyalist (Retained)', '5. Returning - Churner (Leakage)', '6. Returning - Hard No (Consistent)') 
+            THEN '2. Returning Customers'
+    END AS Customer_Cohort,
+    
+    -- Volume (The Traffic)
+    COUNT(DISTINCT thread_acct_key) AS Total_Customer_Traffic,
+    
+    -- Protected Volume
+    COUNT(DISTINCT CASE WHEN Customer_Level_Bucket IN ('2. Net New - Acquired', '3. Returning - Convert (Win-Back/Upsell)', '4. Returning - Loyalist (Retained)') THEN thread_acct_key END) AS Protected_Customers,
+    
+    -- The Rate (The true measure of sales skill)
+    ROUND(COUNT(DISTINCT CASE WHEN Customer_Level_Bucket IN ('2. Net New - Acquired', '3. Returning - Convert (Win-Back/Upsell)', '4. Returning - Loyalist (Retained)') THEN thread_acct_key END) * 100.0 / 
+          COUNT(DISTINCT thread_acct_key), 1) AS Coverage_Rate_Pct
+
+FROM optional_product_journey_2025
+GROUP BY 1
+ORDER BY 1;
