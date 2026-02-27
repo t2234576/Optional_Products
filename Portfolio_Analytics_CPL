@@ -1,0 +1,195 @@
+/*****CPL*****/  
+select
+last_day(coverage_effective_dt) as month
+,extract(year from a.coverage_effective_dt) as yr
+,extract(month from a.coverage_effective_dt) as mo
+,c.business_day as business_day  
+,case when b.cust_type in ('NC','FC') then 'NCFC' else 'PC' end as cust
+,b.cust_type as cust2
+,case when b.channel = 'Internet: Affiliate' then 'Affiliate'
+when b.channel like 'I%' then 'Digital Direct'
+else 'Branch' end as channel
+,case when e.channel in ('Internet: Search','Internet: Email') then e.channel
+when trim(f.channel_int_detail) in ('Internet: SEO') then 'Internet: SEO'
+when e.channel is null then 'n/a'
+when e.channel in ('Internet: Affiliate') then 'n/a'
+when e.channel in ('Internet: Affinity','Internet: Decline Referral','Internet: Direct Auto','Internet: Lead Referral','Internet: Merchant','Internet: Other','Internet: Organic','Internet: Display','Internet: Social') then 'Other Internet'
+else 'n/a' end as digital_direct_channel
+,case when b.iaps_src_cd in ('90070') then 'CK API'
+when b.iaps_src_cd in ('31411','31427','31438') then 'CK LBOX'
+when b.iaps_src_cd in ('30637') then 'CK LINK'
+when b.iaps_src_cd in ('30596','31305','31403','31409','90024') then 'Lend Tree'
+when trim(e.descr) in ('Quin Street','Even Financial') then trim(e.descr)
+when b.channel ='Internet: Affiliate' then 'Other Affiliates'
+else 'n/a' end as affiliate_grp
+,case when b.rsk_lvl in ('S','P','A','B','C') then b.rsk_lvl else 'D-' end as risk
+,case when b.offer_type in ('sec only','review') then 'sec only'
+when b.offer_type in ('Null','decline') then 'decline'
+else b.offer_type end as offer_type
+,d.sdl
+,b.smd_nm
+,case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' then b.branch_st else b.p_adr_st end as state
+,'Actuals' as segment
+,case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' and b.branch_st = 'IL' then 'include'
+      when b.fdc_elig = 'Y' and b.fdc_off_ramp is null then 'include'
+      when b.branch_group <> 'CFG' then 'exclude'
+      when b.branch_nm like '%CENTRALIZED%' then 'exclude'
+      else 'include' end as cpl_filter
+,core_v_capp as core_capp_filter
+,b.reactive_flag
+,0 as total_apps
+,0 as apprv_apps
+,0 as spa_apprv_apps
+,0 as dual_offer_int_apprv
+,0 as dual_offer_brnch_apprv
+,0 as sec_only_int_apprv
+,0 as sec_only_brnch_apprv
+,0 as loans
+,0 as sp_loans
+,0 as a_loans
+,0 as bminus_loans
+,0 as nc_loans
+,0 as fc_loans
+,0 as pc_loans
+,0 as net_cpl_loans
+,0 as secured_loans
+,0 as unsecured_loans
+,0 as dual_offer_int_loans
+,0 as dual_offer_brnch_loans
+,0 as sec_only_int_loans
+,0 as sec_only_brnch_loans  
+,0 as net_vol
+,0 as new_money
+,0 as capp_new_money
+,0 as secured_vol
+,0 as unsecured_vol
+,0 as secured_new_money
+,0 as unsecured_new_money
+,0 as dual_offer_secured_vol
+,0 as dual_offer_total_vol
+,0 as remote_close_loans
+ 
+,sum(case when c.day_of_week = 'Sun' and a.coverage_effective_dt < current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1
+        when c.day_of_week <> 'Sun' and a.coverage_effective_dt <= current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1 
+        else 0 end) as sold_total
+ 
+,0 as cancel_total
+,0 as direct_pay_at_closing
+,0 as apr_net_vol
+from core.optional_product_sale a
+join bdm.app_loan_production b
+on a.uai_id = b.uai_id
+join bdm.business_day_calendar c
+on a.coverage_effective_dt = c.day_of_month
+left join bdm.initiatives d
+on b.acap_refr_id = d.acap_refr_id
+and b.acap_refr_id > 0
+left join bdm.internet_source_codes e
+on trim(b.iaps_src_cd) = trim(e.source_code)
+and b.iaps_src_cd::numeric > 0
+left join BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f
+on b.appl_key = f.appl_key
+and b.appl_key > 0
+where a.uai_id is not null
+and coverage_effective_dt >= '2022-01-01'
+and coverage_effective_dt <= current_date - 2
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
+union all
+select 
+last_day(cancel_effective_dt) as month
+,extract(year from a.cancel_effective_dt) as yr
+,extract(month from a.cancel_effective_dt) as mo
+,c.business_day as business_day  
+,case when b.cust_type in ('NC','FC') then 'NCFC' else 'PC' end as cust
+,b.cust_type as cust2
+,case when b.channel = 'Internet: Affiliate' then 'Affiliate'
+when b.channel like 'I%' then 'Digital Direct'
+else 'Branch' end as channel
+,case when e.channel in ('Internet: Search','Internet: Email') then e.channel
+when trim(f.channel_int_detail) in ('Internet: SEO') then 'Internet: SEO'
+when e.channel is null then 'n/a'
+when e.channel in ('Internet: Affiliate') then 'n/a'
+when e.channel in ('Internet: Affinity','Internet: Decline Referral','Internet: Direct Auto','Internet: Lead Referral','Internet: Merchant','Internet: Other','Internet: Organic','Internet: Display','Internet: Social') then 'Other Internet'
+else 'n/a' end as digital_direct_channel
+,case when b.iaps_src_cd in ('90070') then 'CK API'
+when b.iaps_src_cd in ('31411','31427','31438') then 'CK LBOX'
+when b.iaps_src_cd in ('30637') then 'CK LINK'
+when b.iaps_src_cd in ('30596','31305','31403','31409','90024') then 'Lend Tree'
+when trim(e.descr) in ('Quin Street','Even Financial') then trim(e.descr)
+when b.channel ='Internet: Affiliate' then 'Other Affiliates'
+else 'n/a' end as affiliate_grp
+,case when b.rsk_lvl in ('S','P','A','B','C') then b.rsk_lvl else 'D-' end as risk
+,case when b.offer_type in ('sec only','review') then 'sec only'
+when b.offer_type in ('Null','decline') then 'decline'
+else b.offer_type end as offer_type
+,d.sdl
+,b.smd_nm
+,case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' then b.branch_st else b.p_adr_st end as state
+,'Actuals' as segment
+,case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' and b.branch_st = 'IL' then 'include'
+      when b.fdc_elig = 'Y' and b.fdc_off_ramp is null then 'include'
+      when b.branch_group <> 'CFG' then 'exclude'
+      when b.branch_nm like '%CENTRALIZED%' then 'exclude'
+      else 'include' end as cpl_filter
+,core_v_capp as core_capp_filter 
+,b.reactive_flag  
+,0 as total_apps
+,0 as apprv_apps
+,0 as spa_apprv_apps
+,0 as dual_offer_int_apprv
+,0 as dual_offer_brnch_apprv
+,0 as sec_only_int_apprv
+,0 as sec_only_brnch_apprv
+,0 as loans
+,0 as sp_loans
+,0 as a_loans
+,0 as bminus_loans 
+,0 as nc_loans
+,0 as fc_loans
+,0 as pc_loans
+,0 as net_cpl_loans
+,0 as secured_loans
+,0 as unsecured_loans
+,0 as dual_offer_int_loans
+,0 as dual_offer_brnch_loans
+,0 as sec_only_int_loans
+,0 as sec_only_brnch_loans
+,0 as net_vol
+,0 as new_money
+,0 as capp_new_money
+,0 as secured_vol
+,0 as unsecured_vol
+,0 as secured_new_money
+,0 as unsecured_new_money
+,0 as dual_offer_secured_vol
+,0 as dual_offer_total_vol
+,0 as remote_close_loans
+,0 as sold_total
+ 
+,sum(case when c.day_of_week = 'Sun' and cancel_effective_dt < current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1
+        when c.day_of_week <> 'Sun' and cancel_effective_dt <= current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1 
+        else 0 end) as cancel_total
+ 
+,0 as direct_pay_at_closing
+,0 as apr_net_vol
+from core.optional_product_sale a
+join bdm.app_loan_production b
+on a.uai_id = b.uai_id
+join bdm.business_day_calendar c
+on a.cancel_effective_dt = c.day_of_month
+left join bdm.initiatives d
+on b.acap_refr_id = d.acap_refr_id
+and b.acap_refr_id > 0
+left join bdm.internet_source_codes e
+on trim(b.iaps_src_cd) = trim(e.source_code)
+and b.iaps_src_cd::numeric > 0
+left join BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f
+on b.appl_key = f.appl_key
+and b.appl_key > 0
+ 
+where a.uai_id is not null 
+and cancel_effective_dt >= '2022-01-01'
+and a.cancel_60day_ct = 1
+and cancel_effective_dt <= current_date - 2
+and customer_initiated_cancel_yn = 'Y'
+group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
