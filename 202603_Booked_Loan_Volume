@@ -55,3 +55,44 @@ WHERE EXTRACT(YEAR FROM lp.contr_date) BETWEEN 2019 AND 2025
   AND (sat.LOAN_REASON_CD IS NULL OR sat.LOAN_REASON_CD != '1') 
   AND bed.uai_id IS NULL;
 
+-- ====================================================================
+-- 2. CREATE PRODUCT LEVEL SALES TABLE (With Legacy Flags)
+-- Purpose: 1 Row = 1 Product Sold on a Validated Core Loan
+-- ====================================================================
+CREATE OR REPLACE TEMPORARY TABLE bdm.temp_ops_product_level AS
+
+SELECT 
+    a.*,
+    lb.Book_Year,
+    lb.Channel_Group,
+    EXTRACT(YEAR FROM a.COVERAGE_EFFECTIVE_DT) AS Sales_Year,
+    DATEDIFF('d', LAST_DAY(a.COVERAGE_EFFECTIVE_DT), a.SALE_MONTH_END_DT) AS Days_to_Month_End,
+    EXTRACT(YEAR FROM a.CANCEL_EFFECTIVE_DT) AS Cancel_Year,
+
+    -- 1. Brendan's CPL Filter Flag
+    CASE 
+        WHEN lb.branch_group = 'CFG' AND lb.branch_nm NOT LIKE '%CENTRALIZED%' AND lb.branch_st = 'IL' THEN 'include'
+        WHEN lb.fdc_elig = 'Y' AND lb.fdc_off_ramp IS NULL THEN 'include'
+        WHEN lb.branch_group <> 'CFG' THEN 'exclude'
+        WHEN lb.branch_nm LIKE '%CENTRALIZED%' THEN 'exclude'
+        ELSE 'include' 
+    END AS CPL_Filter_Flag,
+
+    -- 2. Katie's Legacy Product Inclusion Flag
+    CASE 
+        WHEN (a.coverage_abbreviation_cd IN ('HA','SSG','OMP') AND a.ORIGINAL_PREMIUM_AM > 0 AND DATEDIFF('d', LAST_DAY(a.COVERAGE_EFFECTIVE_DT), a.SALE_MONTH_END_DT) <= 90)
+          OR a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','ATL')
+        THEN 1 ELSE 0 
+    END AS Legacy_Product_Flag,
+    
+    -- 3. Katie/Brendan's Strict 60-Day Customer Cancel Flag
+    CASE 
+        WHEN a.CANCEL_60DAY_CT = 1 AND a.CUSTOMER_INITIATED_CANCEL_YN = 'Y' 
+        THEN 1 ELSE 0 
+    END AS Legacy_60D_Cancel_Flag
+
+FROM core.optional_product_sale a
+INNER JOIN bdm.temp_loan_base_19_25 lb 
+    ON a.UAI_ID = lb.UAI_ID
+WHERE a.SALE_CT = 1 
+  AND a.COVERAGE_EFFECTIVE_DT >= '2019-01-01';
