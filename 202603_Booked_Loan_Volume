@@ -1,3 +1,23 @@
+/* ====================================================================================================
+OBJECTIVE: 
+Reconcile Total Booked Loan Counts for 2019-2025 to match Brendan/Katie's Legacy CPL reports.
+
+METHODOLOGY: 
+- Groups performance into 'Branch Network' vs 'Central Sales' using Katie’s 
+  specific SDO, Address, and Branch ID logic.
+- Applies strict exclusions for Bedrock, Suretrack, and non-Core (CAPP) loans.
+- Aligns with legacy Volume (Vol_Type = 'N') and Retraction filters.
+
+ACCURACY STATUS: 
+- Validated at < 1bps (36-loan total variance) against March 2026 legacy snapshot.
+
+DATA SOURCES:
+- bdm.app_loan_production (Base Loan Data)
+- sa.v_bif_cur_fin (Branch Information)
+- sa.pl_acct_all_vol (Volume/Netting Flags)
+- EDS.ODS.SAT_ACCOUNT_SCORE_LAST_RECORD (Suretrack filtering)
+====================================================================================================
+*/
 SELECT 
     EXTRACT(YEAR FROM lp.contr_date) AS Book_Year,
     
