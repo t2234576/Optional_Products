@@ -1,0 +1,51 @@
+SELECT 
+    EXTRACT(YEAR FROM lp.contr_date) AS Book_Year,
+    
+    -- Katie's Business Channel Logic
+    CASE 
+        WHEN bif.BIF_CAT_CD IN ('SVC', 'BAC', 'SV3') THEN 'Central Sales'
+        WHEN vol.OWN_BR IN (10800919, 9800586, 9800856, 20800013, 6800869) THEN 'Central Sales'
+        
+        -- FIX 1: Exact match on address (Removed ILIKE wildcards to stop leakage)
+        WHEN TRIM(UPPER(bif.BIF_ST_ADR1_TX::VARCHAR)) IN ('601 NW 2ND ST', '601 NW 2ND STREET') THEN 'Central Sales'
+        
+        -- Keep ILIKE here because Katie explicitly uses it in her script
+        WHEN bif.BIF_BRNCH_NM::VARCHAR ILIKE '%OM 3PAY%' THEN 'Central Sales'
+        WHEN bif.BIF_BRNCH_NM::VARCHAR ILIKE '%OPERATIONS INNOVATION LAB%' THEN 'Central Sales'
+        
+        -- FIX 2: Exact match on SDO name with a safety TRIM
+        WHEN TRIM(UPPER(bif.BIF_SDO_EMP_NM::VARCHAR)) IN ('U/A SDO-CONSUM FIN GRP', 'TRM-LEFANOWICZ, MARK') THEN 'Central Sales'
+        
+        ELSE 'Branch Network'
+    END AS Channel_Group,
+    
+    COUNT(DISTINCT lp.UAI_ID) AS Total_Loan_Counts
+
+FROM bdm.app_loan_production lp
+LEFT JOIN sa.v_bif_cur_fin bif 
+    ON lp.OWN_BIF_BRNCH_NO = bif.bif_brnch_no
+INNER JOIN sa.pl_acct_all_vol vol
+    ON lp.UAI_ID = vol.uai_id
+LEFT JOIN EDS.ODS.SAT_ACCOUNT_SCORE_LAST_RECORD sat 
+    ON lp.UAI_ID = sat.uai_id
+
+WHERE EXTRACT(YEAR FROM lp.contr_date) = 2025
+  -- Catch Core loans and any blank/null edge cases
+  AND (lp.CORE_V_CAPP = 'Core' OR lp.CORE_V_CAPP IS NULL)
+  
+  -- Katie's exact master exclusions (Removed 0, 88888888, 43000299)
+  AND lp.OWN_BIF_BRNCH_NO NOT IN (9000160, 16800962, 8800813)
+  
+  -- Katie's Net Volume flags
+  AND vol.RETRACT_YN = 'N' 
+  AND vol.Vol_Type = 'N'
+  AND vol.check_no = '0'
+  
+  -- Exclude Bedrock
+  AND lp.UAI_ID NOT IN (SELECT DISTINCT uai_id FROM EDS.BDM.APP_LOAN_PRODUCTION_Bedrock WHERE uai_id IS NOT NULL)
+  
+  -- Exclude Suretrack
+  AND (sat.LOAN_REASON_CD IS NULL OR sat.LOAN_REASON_CD != '1')
+
+GROUP BY 1, 2
+ORDER BY 1 DESC, 2 ASC;
