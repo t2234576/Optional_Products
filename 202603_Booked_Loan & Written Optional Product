@@ -1,98 +1,155 @@
-/* ====================================================================================================
-OBJECTIVE: 
-Reconcile Total Booked Loan Counts for 2019-2025 to match Brendan/Katie's Legacy CPL reports.
+CREATE OR REPLACE TEMPORARY TABLE bdm.temp_loan_base_jy AS
 
-METHODOLOGY: 
-- Groups performance into 'Branch Network' vs 'Central Sales' using Katie’s 
-  specific SDO, Address, and Branch ID logic.
-- Applies strict exclusions for Bedrock, Suretrack, and non-Core (CAPP) loans.
-- Aligns with legacy Volume (Vol_Type = 'N') and Retraction filters.
-
-ACCURACY STATUS: 
-- Validated at < 1bps (36-loan total variance) against March 2026 legacy snapshot.
-
-DATA SOURCES:
-- bdm.app_loan_production (Base Loan Data)
-- sa.v_bif_cur_fin (Branch Information)
-- sa.pl_acct_all_vol (Volume/Netting Flags)
-- EDS.ODS.SAT_ACCOUNT_SCORE_LAST_RECORD (Suretrack filtering)
-====================================================================================================
--- 1. Create the Reconciled Loan Base (The "Denominator")
-CREATE OR REPLACE TEMP TABLE BDM.temp_loan_base_19_25 AS
-WITH Bedrock_Exclusion AS (
-    SELECT DISTINCT uai_id 
-    FROM EDS.BDM.APP_LOAN_PRODUCTION_Bedrock 
-    WHERE uai_id IS NOT NULL
-)
 SELECT 
-    lp.*, -- Pulls in ALL columns from the base production table
-    EXTRACT(YEAR FROM lp.contr_date) AS Book_Year,
-    LAST_DAY(lp.contr_date) AS Book_Month,
+    b.uai_id,
+    b.acap_refr_id,
+    b.tran_date,
+    b.tran_end_dt AS month,
+    b.core_v_capp AS core_capp_filter,
     
-    -- Katie's Validated Channel Logic
-    CASE 
-        WHEN bif.BIF_CAT_CD IN ('SVC', 'BAC', 'SV3') THEN 'Central Sales'
-        WHEN vol.OWN_BR IN (10800919, 9800586, 9800856, 20800013, 6800869) THEN 'Central Sales'
-        WHEN TRIM(UPPER(bif.BIF_ST_ADR1_TX::VARCHAR)) IN ('601 NW 2ND ST', '601 NW 2ND STREET') THEN 'Central Sales'
-        WHEN bif.BIF_BRNCH_NM::VARCHAR ILIKE '%OM 3PAY%' THEN 'Central Sales'
-        WHEN bif.BIF_BRNCH_NM::VARCHAR ILIKE '%OPERATIONS INNOVATION LAB%' THEN 'Central Sales'
-        WHEN TRIM(UPPER(bif.BIF_SDO_EMP_NM::VARCHAR)) IN ('U/A SDO-CONSUM FIN GRP', 'TRM-LEFANOWICZ, MARK') THEN 'Central Sales'
-        ELSE 'Branch Network Sales'
-    END AS Channel_Group
+    case when b.cust_type in ('NC','FC') then 'NCFC' else 'PC' end as cust,
+    b.cust_type as cust2,
+    
+    case when b.channel = 'Internet: Affiliate' then 'Affiliate'
+         when b.channel like 'I%' then 'Digital Direct'
+         else 'Branch' end as channel,
+         
+    case when e.channel in ('Internet: Search','Internet: Email') then e.channel
+         when trim(f.channel_int_detail) in ('Internet: SEO') then 'Internet: SEO'
+         when e.channel is null then 'n/a'
+         when e.channel in ('Internet: Affiliate') then 'n/a'
+         when e.channel in ('Internet: Affinity','Internet: Decline Referral','Internet: Direct Auto','Internet: Lead Referral','Internet: Merchant','Internet: Other','Internet: Organic','Internet: Display','Internet: Social') then 'Other Internet'
+         else 'n/a' end as digital_direct_channel,
+         
+    case when b.iaps_src_cd in ('90070') then 'CK API'
+         when b.iaps_src_cd in ('31411','31427','31438') then 'CK LBOX'
+         when b.iaps_src_cd in ('30637') then 'CK LINK'
+         when b.iaps_src_cd in ('30596','31305','31403','31409','90024') then 'Lend Tree'
+         when trim(e.descr) in ('Quin Street','Even Financial') then trim(e.descr)
+         when b.channel ='Internet: Affiliate' then 'Other Affiliates'
+         else 'n/a' end as affiliate_grp,
+         
+    case when b.rsk_lvl in ('S','P','A','B','C') then b.rsk_lvl else 'D-' end as risk,
+    
+    case when b.offer_type in ('sec only','review') then 'sec only'
+         when b.offer_type in ('Null','decline') then 'decline'
+         else b.offer_type end as offer_type,
+         
+    d.sdl,
+    b.smd_nm,
+    
+    case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' then b.branch_st else b.p_adr_st end as state,
+    'Actuals' as segment,
+    
+    case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' and b.branch_st = 'IL' then 'include'
+         when b.fdc_elig = 'Y' and b.fdc_off_ramp is null then 'include'
+         when b.branch_group <> 'CFG' then 'exclude'
+         when b.branch_nm like '%CENTRALIZED%' then 'exclude'
+         else 'include' end as cpl_filter,
+         
+    b.reactive_flag,
+    case when extract(dayofweek from b.tran_date) = 0 and b.tran_date < current_date - 2 then 1
+         when extract(dayofweek from b.tran_date) <> 0 and b.tran_date <= current_date - 2 then 1 
+         else 0 end as Net_CPL_Loan_Flag
 
-FROM bdm.app_loan_production lp
-LEFT JOIN sa.v_bif_cur_fin bif ON lp.OWN_BIF_BRNCH_NO = bif.bif_brnch_no
-INNER JOIN sa.pl_acct_all_vol vol ON lp.UAI_ID = vol.uai_id
-LEFT JOIN EDS.ODS.SAT_ACCOUNT_SCORE_LAST_RECORD sat ON lp.UAI_ID = sat.uai_id
-LEFT JOIN Bedrock_Exclusion bed ON lp.UAI_ID = bed.uai_id
+FROM bdm.app_loan_production b
+LEFT JOIN bdm.initiatives d 
+    ON b.acap_refr_id = d.acap_refr_id and b.acap_refr_id > 0
+LEFT JOIN bdm.internet_source_codes e 
+    ON trim(b.iaps_src_cd) = trim(e.source_code) and b.iaps_src_cd::numeric > 0
+LEFT JOIN BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f 
+    ON b.appl_key = f.appl_key and b.appl_key > 0
 
-WHERE EXTRACT(YEAR FROM lp.contr_date) BETWEEN 2019 AND 2025
-  AND (lp.CORE_V_CAPP = 'Core' OR lp.CORE_V_CAPP IS NULL)
-  AND vol.RETRACT_YN = 'N' 
-  AND vol.Vol_Type = 'N'
-  AND vol.check_no = '0'
-  AND lp.OWN_BIF_BRNCH_NO NOT IN (9000160, 16800962, 8800813)
-  AND (sat.LOAN_REASON_CD IS NULL OR sat.LOAN_REASON_CD != '1') 
-  AND bed.uai_id IS NULL;
+WHERE b.tran_date >= '2019-01-01'
+  AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL);
 
--- ====================================================================
--- 2. CREATE PRODUCT LEVEL SALES TABLE (With Legacy Flags)
--- Purpose: 1 Row = 1 Product Sold on a Validated Core Loan
--- ====================================================================
-CREATE OR REPLACE TEMPORARY TABLE bdm.temp_ops_product_level AS
+  /** QUICK SANITY CHECK ON TOTAL BOOKED LOANS**/
+  SELECT YEAR(MONTH), SUM(Net_CPL_Loan_Flag) FROM BDM.TEMP_LOAN_BASE_JY GROUP BY 1 ORDER BY 1 ASC; 
+
+CREATE OR REPLACE TEMPORARY TABLE bdm.temp_ops_product_jy AS
 
 SELECT 
     a.*,
-    lb.Book_Year,
-    lb.Channel_Group,
-    EXTRACT(YEAR FROM a.COVERAGE_EFFECTIVE_DT) AS Sales_Year,
-    DATEDIFF('d', LAST_DAY(a.COVERAGE_EFFECTIVE_DT), a.SALE_MONTH_END_DT) AS Days_to_Month_End,
-    EXTRACT(YEAR FROM a.CANCEL_EFFECTIVE_DT) AS Cancel_Year,
-
-    -- 1. Brendan's CPL Filter Flag
-    CASE 
-        WHEN lb.branch_group = 'CFG' AND lb.branch_nm NOT LIKE '%CENTRALIZED%' AND lb.branch_st = 'IL' THEN 'include'
-        WHEN lb.fdc_elig = 'Y' AND lb.fdc_off_ramp IS NULL THEN 'include'
-        WHEN lb.branch_group <> 'CFG' THEN 'exclude'
-        WHEN lb.branch_nm LIKE '%CENTRALIZED%' THEN 'exclude'
-        ELSE 'include' 
-    END AS CPL_Filter_Flag,
-
-    -- 2. Katie's Legacy Product Inclusion Flag
-    CASE 
-        WHEN (a.coverage_abbreviation_cd IN ('HA','SSG','OMP') AND a.ORIGINAL_PREMIUM_AM > 0 AND DATEDIFF('d', LAST_DAY(a.COVERAGE_EFFECTIVE_DT), a.SALE_MONTH_END_DT) <= 90)
-          OR a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','ATL')
-        THEN 1 ELSE 0 
-    END AS Legacy_Product_Flag,
     
-    -- 3. Katie/Brendan's Strict 60-Day Customer Cancel Flag
-    CASE 
-        WHEN a.CANCEL_60DAY_CT = 1 AND a.CUSTOMER_INITIATED_CANCEL_YN = 'Y' 
-        THEN 1 ELSE 0 
-    END AS Legacy_60D_Cancel_Flag
+    -- Inheriting dimensions from the loan base
+    b.cust,
+    b.cust2,
+    b.channel,
+    b.digital_direct_channel,
+    b.affiliate_grp,
+    b.risk,
+    b.offer_type,
+    b.sdl,
+    b.smd_nm,
+    b.state,
+    b.segment,
+    b.cpl_filter,
+    b.core_capp_filter,
+    b.reactive_flag,
+
+    -- Sold Flag Logic
+    case when c_sale.day_of_week = 'Sun' and a.coverage_effective_dt < current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1
+         when c_sale.day_of_week <> 'Sun' and a.coverage_effective_dt <= current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1 
+         else 0 end as NET_CPL_SOLD_FLAG,
+
+    -- Cancel Flag Logic
+    case when a.cancel_60day_ct = 1 and a.customer_initiated_cancel_yn = 'Y' and c_can.day_of_week = 'Sun' and a.cancel_effective_dt < current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1
+         when a.cancel_60day_ct = 1 and a.customer_initiated_cancel_yn = 'Y' and c_can.day_of_week <> 'Sun' and a.cancel_effective_dt <= current_date - 2 and a.coverage_abbreviation_cd in ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') then 1 
+         else 0 end as NET_CPL_CANCEL_FLAG
 
 FROM core.optional_product_sale a
-INNER JOIN bdm.temp_loan_base_19_25 lb 
-    ON a.UAI_ID = lb.UAI_ID
-WHERE a.SALE_CT = 1 
-  AND a.COVERAGE_EFFECTIVE_DT >= '2019-01-01';
+INNER JOIN bdm.temp_loan_base_jy b 
+    ON a.uai_id = b.uai_id
+LEFT JOIN bdm.business_day_calendar c_sale 
+    ON a.coverage_effective_dt = c_sale.day_of_month
+LEFT JOIN bdm.business_day_calendar c_can 
+    ON a.cancel_effective_dt = c_can.day_of_month
+    
+WHERE a.uai_id IS NOT NULL 
+  AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01');
+
+  /** QUICK SANITY CHECK ON LOAN, SOLD, CANCEL **/
+
+WITH loans AS (
+    SELECT 
+        EXTRACT(YEAR FROM tran_date) AS Report_Year,
+        cpl_filter,
+        SUM(Net_CPL_Loan_Flag) AS Net_CPL_Loans
+    FROM bdm.temp_loan_base_jy
+    WHERE core_capp_filter = 'Core' OR core_capp_filter IS NULL
+    GROUP BY 1, 2
+),
+sold AS (
+    SELECT 
+        EXTRACT(YEAR FROM coverage_effective_dt) AS Report_Year,
+        cpl_filter,
+        SUM(NET_CPL_SOLD_FLAG) AS Products_Sold
+    FROM bdm.temp_ops_product_jy
+    WHERE core_capp_filter = 'Core' OR core_capp_filter IS NULL
+    GROUP BY 1, 2
+),
+cancels AS (
+    SELECT 
+        EXTRACT(YEAR FROM cancel_effective_dt) AS Report_Year,
+        cpl_filter,
+        SUM(NET_CPL_CANCEL_FLAG) AS Products_Cancelled
+    FROM bdm.temp_ops_product_jy
+    WHERE core_capp_filter = 'Core' OR core_capp_filter IS NULL
+    GROUP BY 1, 2
+)
+
+SELECT 
+    COALESCE(l.Report_Year, s.Report_Year, c.Report_Year) AS Report_Year,
+    COALESCE(l.cpl_filter, s.cpl_filter, c.cpl_filter) AS cpl_filter,
+    COALESCE(l.Net_CPL_Loans, 0) AS Total_Core_Loans,
+    COALESCE(s.Products_Sold, 0) AS Core_Products_Sold,
+    COALESCE(c.Products_Cancelled, 0) AS Core_Products_Cancelled,
+    ROUND((COALESCE(s.Products_Sold, 0) - COALESCE(c.Products_Cancelled, 0))::NUMERIC / NULLIF(l.Net_CPL_Loans, 0), 2) AS Net_Core_CPL
+FROM loans l
+FULL OUTER JOIN sold s 
+    ON l.Report_Year = s.Report_Year AND l.cpl_filter = s.cpl_filter
+FULL OUTER JOIN cancels c 
+    ON COALESCE(l.Report_Year, s.Report_Year) = c.Report_Year 
+    AND COALESCE(l.cpl_filter, s.cpl_filter) = c.cpl_filter
+WHERE COALESCE(l.Report_Year, s.Report_Year, c.Report_Year) IS NOT NULL
+ORDER BY 1 DESC, 2 ASC;
