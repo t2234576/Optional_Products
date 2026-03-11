@@ -196,6 +196,7 @@ group by 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18
 ;
 
 /*****GROUP BY TO GET QUICK SUM*****/
+/**** CORE TOTAL PRODUCTS SOLD FY2025 = 1174524 ****/
 /*****CPL*****/  
 select month, cpl_filter, core_capp_filter, sum(sold_total), sum(cancel_total)
 from (
