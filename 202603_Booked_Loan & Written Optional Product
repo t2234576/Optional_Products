@@ -1,3 +1,4 @@
+
 CREATE OR REPLACE TEMPORARY TABLE bdm.temp_loan_base_jy AS
 
 SELECT 
@@ -105,8 +106,16 @@ LEFT JOIN bdm.business_day_calendar c_sale
 LEFT JOIN bdm.business_day_calendar c_can 
     ON a.cancel_effective_dt = c_can.day_of_month
     
-WHERE a.uai_id IS NOT NULL 
-  AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01');
+  
+  WHERE a.uai_id IS NOT NULL 
+  AND a.SALE_CT = 1 -- The smoking gun fix
+  AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01') --BRENDAN'S LOGIC ENDS HERE 
+
+-- Deduplication safety net
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY a.uai_id, a.coverage_abbreviation_cd 
+    ORDER BY a.coverage_effective_dt DESC
+) = 1;
 
   /** QUICK SANITY CHECK ON LOAN, SOLD, CANCEL **/
 
