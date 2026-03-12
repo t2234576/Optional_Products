@@ -1,4 +1,3 @@
-
 CREATE OR REPLACE TEMPORARY TABLE bdm.temp_loan_base_jy AS
 
 SELECT 
@@ -38,6 +37,8 @@ SELECT
          
     d.sdl,
     b.smd_nm,
+    b.BRANCH_NM,
+    b.OWN_SCORE_BRNCH,
     
     case when b.branch_group = 'CFG' and b.branch_nm not like '%CENTRALIZED%' then b.branch_st else b.p_adr_st end as state,
     'Actuals' as segment,
@@ -62,10 +63,40 @@ LEFT JOIN BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f
     ON b.appl_key = f.appl_key and b.appl_key > 0
 
 WHERE b.tran_date >= '2019-01-01'
-  AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL);
+  AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL)
+  -- ADDED HARD FILTER: Permanently excluding 'decline' and 'Null' offers
+  AND b.offer_type NOT IN ('decline', 'Null');
 
   /** QUICK SANITY CHECK ON TOTAL BOOKED LOANS**/
+
   SELECT YEAR(MONTH), SUM(Net_CPL_Loan_Flag) FROM BDM.TEMP_LOAN_BASE_JY GROUP BY 1 ORDER BY 1 ASC; 
+  
+  /** QUICK SANITY CHECK ON DIFFERENT TYPES OF OP**/
+  
+  SELECT 
+    year(a.coverage_effective_dt) as coverage_year,
+    a.coverage_abbreviation_cd AS Product_Code,
+    
+    -- Checks if Brendan's script includes or ignores this product
+    CASE 
+        WHEN a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 'Included in CPL'
+        ELSE 'Excluded from CPL' --- AUT is excluded because it is not optional 
+    END AS CPL_Inclusion_Status,
+
+    COUNT(a.uai_id) AS Total_Rows,
+    
+    -- Adding this just to see how many of these rows are actual sales vs. zero-dollar adjustments
+    SUM(CASE WHEN a.SALE_CT = 1 THEN 1 ELSE 0 END) AS Valid_Sales_Count
+
+FROM core.optional_product_sale a
+INNER JOIN bdm.temp_loan_base_jy b 
+    ON a.uai_id = b.uai_id
+
+WHERE a.uai_id IS NOT NULL 
+  AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01')
+
+GROUP BY 1, 2,3
+ORDER BY Total_Rows DESC;
 
 CREATE OR REPLACE TEMPORARY TABLE bdm.temp_ops_product_jy AS
 
@@ -82,6 +113,8 @@ SELECT
     b.offer_type,
     b.sdl,
     b.smd_nm,
+    b.BRANCH_NM,
+    b.OWN_SCORE_BRNCH,
     b.state,
     b.segment,
     b.cpl_filter,
@@ -108,9 +141,10 @@ LEFT JOIN bdm.business_day_calendar c_can
     
   
   WHERE a.uai_id IS NOT NULL 
-  AND a.SALE_CT = 1 -- The smoking gun fix
+  AND a.SALE_CT = 1 -- DEDUP MULTI-ENTRIES 
   AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01') --BRENDAN'S LOGIC ENDS HERE 
-
+-- ADDED HARD FILTER: Permanently excluding 'decline' and 'Null' offers from the product universe
+  AND b.offer_type NOT IN ('decline', 'Null')
 -- Deduplication safety net
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY a.uai_id, a.coverage_abbreviation_cd 
@@ -162,3 +196,121 @@ FULL OUTER JOIN cancels c
     AND COALESCE(l.cpl_filter, s.cpl_filter) = c.cpl_filter
 WHERE COALESCE(l.Report_Year, s.Report_Year, c.Report_Year) IS NOT NULL
 ORDER BY 1 DESC, 2 ASC;
+
+-- ====================================================================
+-- YEARLY PRODUCT VOLUME SUMMARY (2019-2025)
+-- Purpose: Pivots individual product volumes and compares against 
+--          Total Core Loans and Total Core Products Sold.
+-- ====================================================================
+
+WITH loans AS (
+    SELECT 
+        EXTRACT(YEAR FROM tran_date) AS SALES_YEAR,
+        SUM(Net_CPL_Loan_Flag) AS TOTAL_BOOKED_LOANS
+    FROM bdm.temp_loan_base_jy
+    WHERE core_capp_filter = 'Core' OR core_capp_filter IS NULL
+    GROUP BY 1
+),
+products AS (
+    SELECT 
+        EXTRACT(YEAR FROM coverage_effective_dt) AS SALES_YEAR,
+        
+        -- Individual Product Volumes (Counting valid rows)
+        SUM(CASE WHEN coverage_abbreviation_cd IN ('GAP', 'GAPW', 'GAPI') THEN 1 ELSE 0 END) AS GAP_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'SCL' THEN 1 ELSE 0 END) AS SCL_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'SCA' THEN 1 ELSE 0 END) AS SCA_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'IUI' THEN 1 ELSE 0 END) AS IUI_VOLUME,
+        -- SUM(CASE WHEN coverage_abbreviation_cd = 'AUT' THEN 1 ELSE 0 END) AS AUT_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'HA' THEN 1 ELSE 0 END) AS HA_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'ATL' THEN 1 ELSE 0 END) AS ATL_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'SSG' THEN 1 ELSE 0 END) AS SSG_VOLUME,
+        SUM(CASE WHEN coverage_abbreviation_cd = 'DIP' THEN 1 ELSE 0 END) AS DIP_VOLUME,
+        
+        -- Total Sold uses the verified 9-product flag (which automatically excludes AUT)
+        SUM(NET_CPL_SOLD_FLAG) AS TOTAL_PRODUCTS_SOLD
+        
+    FROM bdm.temp_ops_product_jy
+    WHERE core_capp_filter = 'Core' OR core_capp_filter IS NULL
+    GROUP BY 1
+)
+
+SELECT 
+    COALESCE(l.SALES_YEAR, p.SALES_YEAR) AS SALES_YEAR,
+    COALESCE(p.GAP_VOLUME, 0) AS GAP_VOLUME,
+    COALESCE(p.SCL_VOLUME, 0) AS SCL_VOLUME,
+    COALESCE(p.SCA_VOLUME, 0) AS SCA_VOLUME,
+    COALESCE(p.IUI_VOLUME, 0) AS IUI_VOLUME,
+    -- COALESCE(p.AUT_VOLUME, 0) AS AUT_VOLUME,
+    COALESCE(p.HA_VOLUME, 0) AS HA_VOLUME,
+    COALESCE(p.ATL_VOLUME, 0) AS ATL_VOLUME,
+    COALESCE(p.SSG_VOLUME, 0) AS SSG_VOLUME,
+    COALESCE(p.DIP_VOLUME, 0) AS DIP_VOLUME,
+    COALESCE(l.TOTAL_BOOKED_LOANS, 0) AS TOTAL_BOOKED_LOANS,
+    COALESCE(p.TOTAL_PRODUCTS_SOLD, 0) AS TOTAL_PRODUCTS_SOLD
+
+FROM loans l
+FULL OUTER JOIN products p 
+    ON l.SALES_YEAR = p.SALES_YEAR
+    
+WHERE COALESCE(l.SALES_YEAR, p.SALES_YEAR) BETWEEN 2019 AND 2025
+ORDER BY SALES_YEAR ASC;
+
+
+-- ====================================================================
+-- DIAGNOSTIC: LOANS WITH > 8 PRODUCTS
+-- Purpose: Isolates anomalous loans and exposes their row-level 
+--          product details to identify duplicates or bad data.
+-- ====================================================================
+
+WITH Overcounted_Loans AS (
+    -- Step 1: Find the specific uai_ids that are breaking the business rule
+    SELECT 
+        uai_id,
+        SUM(NET_CPL_SOLD_FLAG) AS Total_Products_Flagged
+    FROM bdm.temp_ops_product_jy
+    WHERE EXTRACT(YEAR FROM coverage_effective_dt) = 2025
+    GROUP BY uai_id
+    HAVING SUM(NET_CPL_SOLD_FLAG) > 8
+)
+
+-- Step 2: Pull every product row for those specific loans
+SELECT 
+    o.Total_Products_Flagged,
+    a.uai_id,
+    a.coverage_abbreviation_cd AS Product_Code,
+    a.coverage_effective_dt AS Sold_Date,
+    a.SALE_CT,
+    a.NET_CPL_SOLD_FLAG
+    
+    -- If you are pulling from the raw table directly instead of the temp table, 
+    -- you can add columns like Premium Amount or Status here to see why they duplicate.
+
+FROM bdm.temp_ops_product_jy a
+INNER JOIN Overcounted_Loans o 
+    ON a.uai_id = o.uai_id
+
+-- Sorting so you can read a single loan's history in order
+ORDER BY 
+    o.Total_Products_Flagged DESC, 
+    a.uai_id, 
+    a.coverage_abbreviation_cd,
+    a.coverage_effective_dt DESC;
+    -- ====================================================================
+-- RAW PRODUCT DIAGNOSTIC FOR UAI_ID: 1081272927452
+-- ====================================================================
+
+SELECT 
+    uai_id,
+    coverage_abbreviation_cd AS Product_Code,
+    coverage_effective_dt AS Sold_Date,
+    cancel_effective_dt AS Cancel_Date,
+    SALE_CT,
+    cancel_60day_ct,
+    customer_initiated_cancel_yn
+    
+FROM core.optional_product_sale
+
+WHERE uai_id = 1081272927452
+
+-- Sorting by product code so any duplicates stack right on top of each other
+ORDER BY coverage_abbreviation_cd ASC, Sold_Date DESC;
