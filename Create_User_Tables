@@ -1,0 +1,223 @@
+-- ====================================================================
+-- CREATE SB_COMMON.LOAN_BASE_JY
+-- Permanent version of bdm.temp_loan_base_jy
+-- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
+-- ====================================================================
+-- DROP TABLE SB_COMMON.LOAN_BASE_JY;
+CREATE OR REPLACE TABLE SB_COMMON.LOAN_BASE_JY AS
+
+SELECT 
+    b.uai_id,
+    b.acap_refr_id,
+    b.tran_date,
+    b.tran_end_dt AS month,
+    b.core_v_capp AS core_capp_filter,
+    
+    CASE WHEN b.cust_type IN ('NC','FC') THEN 'NCFC' ELSE 'PC' END AS cust,
+    b.cust_type AS cust2,
+    
+    CASE WHEN b.channel = 'Internet: Affiliate' THEN 'Affiliate'
+         WHEN b.channel LIKE 'I%' THEN 'Digital Direct'
+         ELSE 'Branch' END AS channel,
+         
+    CASE WHEN e.channel IN ('Internet: Search','Internet: Email') THEN e.channel
+         WHEN TRIM(f.channel_int_detail) IN ('Internet: SEO') THEN 'Internet: SEO'
+         WHEN e.channel IS NULL THEN 'n/a'
+         WHEN e.channel IN ('Internet: Affiliate') THEN 'n/a'
+         WHEN e.channel IN ('Internet: Affinity','Internet: Decline Referral','Internet: Direct Auto','Internet: Lead Referral','Internet: Merchant','Internet: Other','Internet: Organic','Internet: Display','Internet: Social') THEN 'Other Internet'
+         ELSE 'n/a' END AS digital_direct_channel,
+         
+    CASE WHEN b.iaps_src_cd IN ('90070') THEN 'CK API'
+         WHEN b.iaps_src_cd IN ('31411','31427','31438') THEN 'CK LBOX'
+         WHEN b.iaps_src_cd IN ('30637') THEN 'CK LINK'
+         WHEN b.iaps_src_cd IN ('30596','31305','31403','31409','90024') THEN 'Lend Tree'
+         WHEN TRIM(e.descr) IN ('Quin Street','Even Financial') THEN TRIM(e.descr)
+         WHEN b.channel = 'Internet: Affiliate' THEN 'Other Affiliates'
+         ELSE 'n/a' END AS affiliate_grp,
+         
+    CASE WHEN b.rsk_lvl IN ('S','P','A','B','C') THEN b.rsk_lvl ELSE 'D-' END AS risk,
+    
+    CASE WHEN b.offer_type IN ('sec only','review') THEN 'sec only'
+         WHEN b.offer_type IN ('Null','decline') THEN 'decline'
+         ELSE b.offer_type END AS offer_type,
+         
+    d.sdl,
+    b.smd_nm,
+    b.BRANCH_NM,
+    b.OWN_SCORE_BRNCH,
+    
+    CASE WHEN b.branch_group = 'CFG' AND b.branch_nm NOT LIKE '%CENTRALIZED%' THEN b.branch_st ELSE b.p_adr_st END AS state,
+    'Actuals' AS segment,
+    
+    CASE WHEN b.branch_group = 'CFG' AND b.branch_nm NOT LIKE '%CENTRALIZED%' AND b.branch_st = 'IL' THEN 'include'
+         WHEN b.fdc_elig = 'Y' AND b.fdc_off_ramp IS NULL THEN 'include'
+         WHEN b.branch_group <> 'CFG' THEN 'exclude'
+         WHEN b.branch_nm LIKE '%CENTRALIZED%' THEN 'exclude'
+         ELSE 'include' END AS cpl_filter,
+         
+    b.reactive_flag,
+
+    -- Secure loan fields (NEW)
+    b.SECURE_TYPE,
+    b.SECURE_GRP,
+
+    CASE WHEN EXTRACT(DAYOFWEEK FROM b.tran_date) = 0 AND b.tran_date < CURRENT_DATE - 2 THEN 1
+         WHEN EXTRACT(DAYOFWEEK FROM b.tran_date) <> 0 AND b.tran_date <= CURRENT_DATE - 2 THEN 1 
+         ELSE 0 END AS Net_CPL_Loan_Flag
+
+FROM bdm.app_loan_production b
+LEFT JOIN bdm.initiatives d 
+    ON b.acap_refr_id = d.acap_refr_id AND b.acap_refr_id > 0
+LEFT JOIN bdm.internet_source_codes e 
+    ON TRIM(b.iaps_src_cd) = TRIM(e.source_code) AND b.iaps_src_cd::NUMERIC > 0
+LEFT JOIN BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f 
+    ON b.appl_key = f.appl_key AND b.appl_key > 0
+
+WHERE b.tran_date >= '2019-01-01'
+  AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL)
+  AND b.offer_type NOT IN ('decline', 'Null');
+
+
+-- ====================================================================
+-- CREATE SB_COMMON.OPS_PRODUCT_JY
+-- Permanent version of bdm.temp_ops_product_jy
+-- Inherits SECURE_TYPE, SECURE_GRP from loan base
+-- Note: Joins to SB_COMMON.LOAN_BASE_JY (run that first)
+-- ====================================================================
+
+CREATE OR REPLACE TABLE SB_COMMON.OPS_PRODUCT_JY AS
+
+SELECT 
+    a.*,
+    
+    -- Inheriting dimensions from the loan base
+    b.cust,
+    b.cust2,
+    b.channel,
+    b.digital_direct_channel,
+    b.affiliate_grp,
+    b.risk,
+    b.offer_type,
+    b.sdl,
+    b.smd_nm,
+    b.BRANCH_NM,
+    b.OWN_SCORE_BRNCH,
+    b.state,
+    b.segment,
+    b.cpl_filter,
+    b.core_capp_filter,
+    b.reactive_flag,
+
+    -- Secure loan fields (NEW)
+    b.SECURE_TYPE,
+    b.SECURE_GRP,
+
+    -- Sold Flag Logic
+    CASE WHEN c_sale.day_of_week = 'Sun' AND a.coverage_effective_dt < CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
+         WHEN c_sale.day_of_week <> 'Sun' AND a.coverage_effective_dt <= CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1 
+         ELSE 0 END AS NET_CPL_SOLD_FLAG,
+
+    -- Cancel Flag Logic
+    CASE WHEN a.cancel_60day_ct = 1 AND a.customer_initiated_cancel_yn = 'Y' AND c_can.day_of_week = 'Sun' AND a.cancel_effective_dt < CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
+         WHEN a.cancel_60day_ct = 1 AND a.customer_initiated_cancel_yn = 'Y' AND c_can.day_of_week <> 'Sun' AND a.cancel_effective_dt <= CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1 
+         ELSE 0 END AS NET_CPL_CANCEL_FLAG
+
+FROM core.optional_product_sale a
+INNER JOIN SB_COMMON.LOAN_BASE_JY b 
+    ON a.uai_id = b.uai_id
+LEFT JOIN bdm.business_day_calendar c_sale 
+    ON a.coverage_effective_dt = c_sale.day_of_month
+LEFT JOIN bdm.business_day_calendar c_can 
+    ON a.cancel_effective_dt = c_can.day_of_month
+
+WHERE a.uai_id IS NOT NULL 
+  AND a.SALE_CT = 1
+  AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01')
+  AND b.offer_type NOT IN ('decline', 'Null')
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY a.uai_id, a.coverage_abbreviation_cd 
+    ORDER BY a.coverage_effective_dt DESC
+) = 1;
+
+CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
+    State_Cd VARCHAR(2) PRIMARY KEY,
+    SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
+    SCA_STATE_AVAIL CHAR(1), IUI_STATE_AVAIL CHAR(1),
+    GAP_STATE_AVAIL CHAR(1), GAP_STATE_TYPE VARCHAR(10),
+    ATL_STATE_AVAIL CHAR(1), DIP_STATE_AVAIL CHAR(1),
+    AUT_STATE_AVAIL CHAR(1), HA_STATE_AVAIL CHAR(1),
+    SSG_STATE_AVAIL CHAR(1), OMP_STATE_AVAIL CHAR(1)
+);
+
+--        State SCL  MAX  SCA  IUI  GAP  GAP_TYPE     ATL  DIP  AUT  HA   SSG  OMP
+INSERT INTO SB_COMMON.State_Sales_Grid VALUES
+('AL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- ATL: N→Y
+('CA','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),      -- ATL: N→Y
+('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('DE','Y','Y','Y','Y','Y','Waiver',   'N','N','Y','Y','Y','N'),
+('FL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('GA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- SSG: Y→N
+('ID','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('IL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),      -- ADDED: missing from original
+('IN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('IA','Y','Y','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
+('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('KY','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),
+('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- SCL_MAX_AGE: Y→N
+('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- AUT: N→Y, HA: N→Y, SSG: Y→N
+('MD','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('MI','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('MN','Y','Y','Y','Y','N',NULL,       'N','N','N','N','Y','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL
+('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL, SSG: Y→N
+('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
+('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','Y','N'),
+('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','N','Y','N'),
+('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),      -- SSG: N→Y
+('NH','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
+('NJ','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('NY','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
+('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),      -- SSG: Y→N
+('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- GAP: N→Y, GAP_TYPE: NULL→Insurance, AUT: N→Y, SSG: Y→N
+('OH','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('OK','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('OR','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- HA: N→Y
+('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','N','N','N'),      -- SSG: Y→N
+('SD','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
+('TN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','N','N','N'),      -- SSG: Y→N
+('UT','Y','Y','Y','Y','Y','Insurance','Y','N','N','N','Y','N'),
+('VA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('WA','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
+('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),      -- SSG: Y→N
+('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('WY','Y','Y','Y','Y','Y','Waiver',   'N','N','N','N','N','N');
+
+CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Product_Count AS
+SELECT 
+    State_Cd,
+    (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END) AS CPL_Products_Available,
+    CASE 
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) <= 5 
+            THEN 'Tier A: 4-5 Products'
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) = 6 
+            THEN 'Tier B: 6 Products'
+        ELSE 'Tier C: 7-8 Products'
+    END AS Product_Tier
+FROM SB_COMMON.State_Sales_Grid;
