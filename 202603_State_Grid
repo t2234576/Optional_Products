@@ -1,0 +1,64 @@
+-- ====================================================================
+-- NET CPL QUARTILE ANALYSIS — RANKED WITHIN PRODUCT AVAILABILITY TIER
+-- Purpose: Instead of ranking all branches nationally, rank them
+--          against peers with the same product ceiling.
+--          A branch in a 4-product state competes only against other
+--          4-product state branches. True apples-to-apples.
+-- ====================================================================
+
+-- Step 0: Product availability grid (from your existing script)
+CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
+    State_Cd VARCHAR(2) PRIMARY KEY,
+    SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
+    SCA_STATE_AVAIL CHAR(1), IUI_STATE_AVAIL CHAR(1),
+    GAP_STATE_AVAIL CHAR(1), GAP_STATE_TYPE VARCHAR(10),
+    ATL_STATE_AVAIL CHAR(1), DIP_STATE_AVAIL CHAR(1),
+    AUT_STATE_AVAIL CHAR(1), HA_STATE_AVAIL CHAR(1),
+    SSG_STATE_AVAIL CHAR(1), OMP_STATE_AVAIL CHAR(1)
+);
+select * from SB_COMMON.State_Sales_Grid;
+INSERT INTO SB_COMMON.State_Sales_Grid VALUES
+-- Corrected INSERT VALUES (changes marked with comments)
+('AL','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: ATL: N→Y
+('CA','Y','Y','Y','Y','Y','Waiver','Y','Y','Y','Y','Y','N'),  -- CHANGED: ATL: N→Y
+('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('DE','Y','Y','Y','Y','Y','Waiver','N','N','Y','Y','Y','N'),
+('FL','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('GA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('IA','Y','Y','Y','Y','N',NULL,'N','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
+('ID','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('IN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('KY','Y','Y','Y','Y','Y','Waiver','Y','Y','Y','Y','Y','N'),
+('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: MAX_AGE: Y→N
+('MD','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),  -- CHANGED: AUT: N→Y; HA: N→Y; SSG: Y→N
+('MI','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('MN','Y','Y','Y','Y','N',NULL,'N','N','N','N','Y','N'),  -- CHANGED: GAP: Y→N; GAP_TYPE: Insurance→
+('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
+('MS','Y','Y','Y','Y','N',NULL,'Y','N','Y','N','N','N'),  -- CHANGED: GAP: Y→N; GAP_TYPE: Insurance→; SSG: Y→N
+('MT','Y','N','Y','Y','N',NULL,'N','N','N','N','Y','N'),
+('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
+('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),  -- CHANGED: GAP: N→Y; GAP_TYPE: →Insurance; AUT: N→Y; SSG: Y→N
+('NE','Y','Y','Y','Y','Y','Waiver','Y','N','Y','N','Y','N'),
+('NH','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),
+('NJ','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('NV','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),  -- CHANGED: SSG: N→Y
+('NY','Y','N','Y','Y','N',NULL,'N','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
+('OH','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('OK','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('OR','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: HA: N→Y
+('SC','Y','N','Y','Y','Y','Waiver','Y','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
+('SD','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),
+('TN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('TX','Y','Y','Y','Y','N',NULL,'N','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
+('UT','Y','Y','Y','Y','Y','Insurance','Y','N','N','N','Y','N'),
+('VA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('WA','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),
+('WI','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('WV','Y','Y','Y','Y','Y','Waiver','Y','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
+('WY','Y','Y','Y','Y','Y','Waiver','N','N','N','N','N','N');
