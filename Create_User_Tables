@@ -3,11 +3,15 @@
 -- Permanent version of bdm.temp_loan_base_jy
 -- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
 -- ====================================================================
--- DROP TABLE SB_COMMON.LOAN_BASE_JY;
+DROP TABLE SB_COMMON.LOAN_BASE_JY;
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_BASE_JY AS
 
 SELECT 
     b.uai_id,
+    b.acct_key,
+    B.THREAD_ACCT_KEY, 
+    B.RENEW_YN,
+    B.CUST_ID,
     b.acap_refr_id,
     b.tran_date,
     b.tran_end_dt AS month,
@@ -76,6 +80,9 @@ LEFT JOIN BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f
 WHERE b.tran_date >= '2019-01-01'
   AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL)
   AND b.offer_type NOT IN ('decline', 'Null');
+
+
+
 
 
 -- ====================================================================
