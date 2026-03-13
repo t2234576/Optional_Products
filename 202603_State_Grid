@@ -95,7 +95,7 @@ sold AS (
         EXTRACT(YEAR FROM p.coverage_effective_dt) AS Report_Year,
         st.Credit_Tier,
         SUM(p.NET_CPL_SOLD_FLAG) AS Products_Sold
-    FROM bdm.temp_ops_product_jy p
+    FROM SB_COMMON.OPS_PRODUCT_JY p
     INNER JOIN State_Tiers st 
         ON p.state = st.State_Cd
     WHERE p.cpl_filter = 'include'
@@ -110,7 +110,7 @@ cancels AS (
         EXTRACT(YEAR FROM p.cancel_effective_dt) AS Report_Year,
         st.Credit_Tier,
         SUM(p.NET_CPL_CANCEL_FLAG) AS Products_Cancelled
-    FROM bdm.temp_ops_product_jy p
+    FROM SB_COMMON.OPS_PRODUCT_JY p
     INNER JOIN State_Tiers st 
         ON p.state = st.State_Cd
     WHERE p.cpl_filter = 'include'
@@ -182,7 +182,7 @@ sold AS (
         EXTRACT(YEAR FROM coverage_effective_dt) AS Report_Year,
         OWN_SCORE_BRNCH AS Branch_Identifier,
         SUM(NET_CPL_SOLD_FLAG) AS Products_Sold
-    FROM bdm.temp_ops_product_jy
+    FROM SB_COMMON.OPS_PRODUCT_JY
     WHERE cpl_filter = 'include'
     GROUP BY 1, 2
 ),
@@ -191,7 +191,7 @@ cancels AS (
         EXTRACT(YEAR FROM cancel_effective_dt) AS Report_Year,
         OWN_SCORE_BRNCH AS Branch_Identifier,
         SUM(NET_CPL_CANCEL_FLAG) AS Products_Cancelled
-    FROM bdm.temp_ops_product_jy
+    FROM SB_COMMON.OPS_PRODUCT_JY
     WHERE cpl_filter = 'include'
     GROUP BY 1, 2
 ),
