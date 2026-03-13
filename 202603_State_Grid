@@ -81,7 +81,7 @@ loans AS (
         EXTRACT(YEAR FROM l.tran_date) AS Report_Year,
         st.Credit_Tier,
         SUM(l.Net_CPL_Loan_Flag) AS Total_Loans
-    FROM bdm.temp_loan_base_jy l
+    FROM SB_COMMON.LOAN_BASE_JY l
     INNER JOIN State_Tiers st 
         ON l.state = st.State_Cd
     WHERE l.cpl_filter = 'include'
@@ -173,7 +173,7 @@ WITH loans AS (
         OWN_SCORE_BRNCH AS Branch_Identifier,
         state,
         SUM(Net_CPL_Loan_Flag) AS Total_Loans
-    FROM bdm.temp_loan_base_jy
+    FROM SB_COMMON.LOAN_BASE_JY
     WHERE cpl_filter = 'include'
     GROUP BY 1, 2, 3
 ),
