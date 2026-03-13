@@ -62,3 +62,96 @@ INSERT INTO SB_COMMON.State_Sales_Grid VALUES
 ('WI','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
 ('WV','Y','Y','Y','Y','Y','Waiver','Y','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
 ('WY','Y','Y','Y','Y','Y','Waiver','N','N','N','N','N','N');
+
+
+-- ====================================================================
+-- STATE PRODUCT AVAILABILITY SUMMARY (Snowflake compatible)
+-- ====================================================================
+
+SELECT 
+    State_Cd,
+
+    -- Count of CPL-eligible products
+    (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
+    ) AS CPL_Products_Available,
+
+    -- Credit products available
+    RTRIM(
+        CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 'SCL, ' ELSE '' END ||
+        CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 'SCA, ' ELSE '' END ||
+        CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 'IUI, ' ELSE '' END ||
+        CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 'GAP (' || COALESCE(GAP_STATE_TYPE, 'N/A') || '), ' ELSE '' END
+    , ', ') AS Credit_Products,
+
+    -- Credit product count
+    (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
+    ) AS Credit_Product_Count,
+
+    -- Non-credit products available
+    RTRIM(
+        CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 'ATL, ' ELSE '' END ||
+        CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 'DIP, ' ELSE '' END ||
+        CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 'HA, '  ELSE '' END ||
+        CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 'SSG, ' ELSE '' END
+    , ', ') AS NonCredit_Products,
+
+    -- Non-credit product count
+    (CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
+    ) AS NonCredit_Product_Count,
+
+    -- All CPL products concatenated
+    RTRIM(
+        CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 'SCL, ' ELSE '' END ||
+        CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 'SCA, ' ELSE '' END ||
+        CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 'IUI, ' ELSE '' END ||
+        CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 'GAP, ' ELSE '' END ||
+        CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 'ATL, ' ELSE '' END ||
+        CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 'DIP, ' ELSE '' END ||
+        CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 'HA, '  ELSE '' END ||
+        CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 'SSG, ' ELSE '' END
+    , ', ') AS All_CPL_Products,
+
+    -- Missing products
+    RTRIM(
+        CASE WHEN SCL_STATE_AVAIL = 'N' THEN 'SCL, ' ELSE '' END ||
+        CASE WHEN SCA_STATE_AVAIL = 'N' THEN 'SCA, ' ELSE '' END ||
+        CASE WHEN IUI_STATE_AVAIL = 'N' THEN 'IUI, ' ELSE '' END ||
+        CASE WHEN GAP_STATE_AVAIL = 'N' THEN 'GAP, ' ELSE '' END ||
+        CASE WHEN ATL_STATE_AVAIL = 'N' THEN 'ATL, ' ELSE '' END ||
+        CASE WHEN DIP_STATE_AVAIL = 'N' THEN 'DIP, ' ELSE '' END ||
+        CASE WHEN HA_STATE_AVAIL  = 'N' THEN 'HA, '  ELSE '' END ||
+        CASE WHEN SSG_STATE_AVAIL = 'N' THEN 'SSG, ' ELSE '' END
+    , ', ') AS Missing_Products,
+
+    -- Tier
+    CASE 
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) <= 5 
+            THEN 'Tier A: 4-5 Products'
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) = 6 
+            THEN 'Tier B: 6 Products'
+        ELSE 'Tier C: 7-8 Products'
+    END AS Product_Tier,
+
+    GAP_STATE_TYPE
+
+FROM sb_common.State_Sales_Grid
+ORDER BY CPL_Products_Available ASC, State_Cd ASC;
