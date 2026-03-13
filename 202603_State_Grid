@@ -1,12 +1,9 @@
 -- ====================================================================
--- NET CPL QUARTILE ANALYSIS — RANKED WITHIN PRODUCT AVAILABILITY TIER
--- Purpose: Instead of ranking all branches nationally, rank them
---          against peers with the same product ceiling.
---          A branch in a 4-product state competes only against other
---          4-product state branches. True apples-to-apples.
+-- CORRECTED State_Sales_Grid INSERT VALUES
+-- Source: State Product Availability Grids PDF (Doc Date: 11/4/2025)
+-- 25 field corrections across 19 states + Illinois added
 -- ====================================================================
 
--- Step 0: Product availability grid (from your existing script)
 CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
     State_Cd VARCHAR(2) PRIMARY KEY,
     SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
@@ -16,62 +13,259 @@ CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
     AUT_STATE_AVAIL CHAR(1), HA_STATE_AVAIL CHAR(1),
     SSG_STATE_AVAIL CHAR(1), OMP_STATE_AVAIL CHAR(1)
 );
-select * from SB_COMMON.State_Sales_Grid;
+
+--        State SCL  MAX  SCA  IUI  GAP  GAP_TYPE     ATL  DIP  AUT  HA   SSG  OMP
 INSERT INTO SB_COMMON.State_Sales_Grid VALUES
--- Corrected INSERT VALUES (changes marked with comments)
-('AL','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
-('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: ATL: N→Y
-('CA','Y','Y','Y','Y','Y','Waiver','Y','Y','Y','Y','Y','N'),  -- CHANGED: ATL: N→Y
-('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
-('DE','Y','Y','Y','Y','Y','Waiver','N','N','Y','Y','Y','N'),
-('FL','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('AL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- ATL: N→Y
+('CA','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),      -- ATL: N→Y
+('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('DE','Y','Y','Y','Y','Y','Waiver',   'N','N','Y','Y','Y','N'),
+('FL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('GA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
-('IA','Y','Y','Y','Y','N',NULL,'N','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
-('ID','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
+('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- SSG: Y→N
+('ID','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('IL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),      -- ADDED: missing from original
 ('IN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('IA','Y','Y','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
 ('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('KY','Y','Y','Y','Y','Y','Waiver','Y','Y','Y','Y','Y','N'),
-('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: MAX_AGE: Y→N
-('MD','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
-('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),  -- CHANGED: AUT: N→Y; HA: N→Y; SSG: Y→N
+('KY','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),
+('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- SCL_MAX_AGE: Y→N
+('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- AUT: N→Y, HA: N→Y, SSG: Y→N
+('MD','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('MI','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('MN','Y','Y','Y','Y','N',NULL,'N','N','N','N','Y','N'),  -- CHANGED: GAP: Y→N; GAP_TYPE: Insurance→
+('MN','Y','Y','Y','Y','N',NULL,       'N','N','N','N','Y','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL
+('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL, SSG: Y→N
 ('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
-('MS','Y','Y','Y','Y','N',NULL,'Y','N','Y','N','N','N'),  -- CHANGED: GAP: Y→N; GAP_TYPE: Insurance→; SSG: Y→N
-('MT','Y','N','Y','Y','N',NULL,'N','N','N','N','Y','N'),
-('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
-('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),  -- CHANGED: GAP: N→Y; GAP_TYPE: →Insurance; AUT: N→Y; SSG: Y→N
-('NE','Y','Y','Y','Y','Y','Waiver','Y','N','Y','N','Y','N'),
-('NH','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),
-('NJ','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','Y','N'),
+('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','N','Y','N'),
+('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),      -- SSG: N→Y
+('NH','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
+('NJ','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','N','N'),      -- SSG: Y→N
 ('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('NV','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),  -- CHANGED: SSG: N→Y
-('NY','Y','N','Y','Y','N',NULL,'N','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
-('OH','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','Y','N'),
-('OK','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
+('NY','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
+('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),      -- SSG: Y→N
+('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- GAP: N→Y, GAP_TYPE: NULL→Insurance, AUT: N→Y, SSG: Y→N
+('OH','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
+('OK','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
 ('OR','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- CHANGED: HA: N→Y
-('SC','Y','N','Y','Y','Y','Waiver','Y','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
-('SD','Y','N','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),
+('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- HA: N→Y
+('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','N','N','N'),      -- SSG: Y→N
+('SD','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('TN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('TX','Y','Y','Y','Y','N',NULL,'N','N','Y','N','N','N'),  -- CHANGED: SSG: Y→N
+('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','N','N','N'),      -- SSG: Y→N
 ('UT','Y','Y','Y','Y','Y','Insurance','Y','N','N','N','Y','N'),
 ('VA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('WA','Y','Y','Y','Y','N',NULL,'Y','N','Y','Y','Y','N'),
-('WI','Y','Y','Y','Y','Y','Waiver','Y','N','Y','Y','N','N'),  -- CHANGED: SSG: Y→N
-('WV','Y','Y','Y','Y','Y','Waiver','Y','N','N','N','N','N'),  -- CHANGED: SSG: Y→N
-('WY','Y','Y','Y','Y','Y','Waiver','N','N','N','N','N','N');
+('WA','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
+('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),      -- SSG: Y→N
+('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('WY','Y','Y','Y','Y','Y','Waiver',   'N','N','N','N','N','N');
 
 
 -- ====================================================================
--- STATE PRODUCT AVAILABILITY SUMMARY (Snowflake compatible)
+-- QUERY 1: CREDIT-ONLY CPL BY GAP TIER (your chart query, corrected)
+-- ====================================================================
+
+WITH State_Tiers AS (
+    SELECT 
+        State_Cd,
+        CASE 
+            WHEN SCL_STATE_AVAIL = 'Y' AND SCA_STATE_AVAIL = 'Y' AND IUI_STATE_AVAIL = 'Y' AND GAP_STATE_AVAIL = 'Y' THEN '4 Products (w/ GAP)'
+            WHEN SCL_STATE_AVAIL = 'Y' AND SCA_STATE_AVAIL = 'Y' AND IUI_STATE_AVAIL = 'Y' AND GAP_STATE_AVAIL = 'N' THEN '3 Products (No GAP)'
+            ELSE 'Other/Unknown' 
+        END AS Credit_Tier
+    FROM SB_COMMON.State_Sales_Grid
+),
+loans AS (
+    SELECT 
+        EXTRACT(YEAR FROM l.tran_date) AS Report_Year,
+        st.Credit_Tier,
+        SUM(l.Net_CPL_Loan_Flag) AS Total_Loans
+    FROM bdm.temp_loan_base_jy l
+    INNER JOIN State_Tiers st 
+        ON l.state = st.State_Cd
+    WHERE l.cpl_filter = 'include'
+      AND (l.core_capp_filter = 'Core' OR l.core_capp_filter IS NULL)
+      AND l.offer_type NOT IN ('decline', 'Null')
+      AND st.Credit_Tier != 'Other/Unknown'
+    GROUP BY 1, 2
+),
+sold AS (
+    SELECT 
+        EXTRACT(YEAR FROM p.coverage_effective_dt) AS Report_Year,
+        st.Credit_Tier,
+        SUM(p.NET_CPL_SOLD_FLAG) AS Products_Sold
+    FROM bdm.temp_ops_product_jy p
+    INNER JOIN State_Tiers st 
+        ON p.state = st.State_Cd
+    WHERE p.cpl_filter = 'include'
+      AND (p.core_capp_filter = 'Core' OR p.core_capp_filter IS NULL)
+      AND p.offer_type NOT IN ('decline', 'Null')
+      AND p.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP')
+      AND st.Credit_Tier != 'Other/Unknown'
+    GROUP BY 1, 2
+),
+cancels AS (
+    SELECT 
+        EXTRACT(YEAR FROM p.cancel_effective_dt) AS Report_Year,
+        st.Credit_Tier,
+        SUM(p.NET_CPL_CANCEL_FLAG) AS Products_Cancelled
+    FROM bdm.temp_ops_product_jy p
+    INNER JOIN State_Tiers st 
+        ON p.state = st.State_Cd
+    WHERE p.cpl_filter = 'include'
+      AND (p.core_capp_filter = 'Core' OR p.core_capp_filter IS NULL)
+      AND p.offer_type NOT IN ('decline', 'Null')
+      AND p.coverage_abbreviation_cd IN ('SCL', 'SCA', 'IUI', 'GAP')
+      AND st.Credit_Tier != 'Other/Unknown'
+    GROUP BY 1, 2
+)
+SELECT 
+    COALESCE(l.Report_Year, s.Report_Year, c.Report_Year) AS Report_Year,
+    COALESCE(l.Credit_Tier, s.Credit_Tier, c.Credit_Tier) AS Credit_Product_Tier,
+    
+    COALESCE(l.Total_Loans, 0) AS Total_Core_Loans,
+    (COALESCE(s.Products_Sold, 0) - COALESCE(c.Products_Cancelled, 0)) AS Net_Credit_Products,
+    
+    ROUND((COALESCE(s.Products_Sold, 0) - COALESCE(c.Products_Cancelled, 0))::NUMERIC / NULLIF(l.Total_Loans, 0), 2) AS Credit_Net_CPL
+FROM loans l
+FULL OUTER JOIN sold s 
+    ON l.Report_Year = s.Report_Year AND l.Credit_Tier = s.Credit_Tier
+FULL OUTER JOIN cancels c 
+    ON COALESCE(l.Report_Year, s.Report_Year) = c.Report_Year 
+    AND COALESCE(l.Credit_Tier, s.Credit_Tier) = c.Credit_Tier
+ORDER BY Report_Year ASC, Credit_Product_Tier ASC;
+
+
+-- ====================================================================
+-- QUERY 2: NET CPL QUARTILE ANALYSIS — RANKED WITHIN PRODUCT TIER
+-- ====================================================================
+
+CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Product_Count AS
+SELECT 
+    State_Cd,
+    (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END) AS CPL_Products_Available,
+    CASE 
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) <= 5 
+            THEN 'Tier A: 4-5 Products'
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) = 6 
+            THEN 'Tier B: 6 Products'
+        ELSE 'Tier C: 7-8 Products'
+    END AS Product_Tier
+FROM SB_COMMON.State_Sales_Grid;
+
+WITH loans AS (
+    SELECT 
+        EXTRACT(YEAR FROM tran_date) AS Report_Year,
+        OWN_SCORE_BRNCH AS Branch_Identifier,
+        state,
+        SUM(Net_CPL_Loan_Flag) AS Total_Loans
+    FROM bdm.temp_loan_base_jy
+    WHERE cpl_filter = 'include'
+    GROUP BY 1, 2, 3
+),
+sold AS (
+    SELECT 
+        EXTRACT(YEAR FROM coverage_effective_dt) AS Report_Year,
+        OWN_SCORE_BRNCH AS Branch_Identifier,
+        SUM(NET_CPL_SOLD_FLAG) AS Products_Sold
+    FROM bdm.temp_ops_product_jy
+    WHERE cpl_filter = 'include'
+    GROUP BY 1, 2
+),
+cancels AS (
+    SELECT 
+        EXTRACT(YEAR FROM cancel_effective_dt) AS Report_Year,
+        OWN_SCORE_BRNCH AS Branch_Identifier,
+        SUM(NET_CPL_CANCEL_FLAG) AS Products_Cancelled
+    FROM bdm.temp_ops_product_jy
+    WHERE cpl_filter = 'include'
+    GROUP BY 1, 2
+),
+Branch_Year_Summary AS (
+    SELECT 
+        COALESCE(l.Report_Year, s.Report_Year, c.Report_Year) AS Report_Year,
+        COALESCE(l.Branch_Identifier, s.Branch_Identifier, c.Branch_Identifier) AS Branch_Identifier,
+        l.state,
+        COALESCE(l.Total_Loans, 0) AS Total_Loans,
+        (COALESCE(s.Products_Sold, 0) - COALESCE(c.Products_Cancelled, 0)) AS Net_Products
+    FROM loans l
+    FULL OUTER JOIN sold s 
+        ON l.Report_Year = s.Report_Year AND l.Branch_Identifier = s.Branch_Identifier
+    FULL OUTER JOIN cancels c 
+        ON COALESCE(l.Report_Year, s.Report_Year) = c.Report_Year 
+        AND COALESCE(l.Branch_Identifier, s.Branch_Identifier) = c.Branch_Identifier
+),
+Ranked_Within_Tier AS (
+    SELECT 
+        bys.Report_Year,
+        bys.Branch_Identifier,
+        bys.state,
+        bys.Total_Loans,
+        bys.Net_Products,
+        ROUND(bys.Net_Products::NUMERIC / NULLIF(bys.Total_Loans, 0), 4) AS Branch_CPL,
+        spc.CPL_Products_Available,
+        spc.Product_Tier,
+        
+        NTILE(4) OVER (
+            PARTITION BY bys.Report_Year
+            ORDER BY (bys.Net_Products::NUMERIC / NULLIF(bys.Total_Loans, 0)) DESC
+        ) AS National_Quartile,
+        
+        NTILE(4) OVER (
+            PARTITION BY bys.Report_Year, spc.Product_Tier
+            ORDER BY (bys.Net_Products::NUMERIC / NULLIF(bys.Total_Loans, 0)) DESC
+        ) AS Tier_Quartile
+        
+    FROM Branch_Year_Summary bys
+    INNER JOIN SB_COMMON.State_Product_Count spc 
+        ON bys.state = spc.State_Cd
+    WHERE bys.Total_Loans >= 12
+      AND bys.Report_Year BETWEEN 2019 AND 2025
+      AND bys.state <> 'IL'
+)
+SELECT 
+    Report_Year,
+    Product_Tier,
+    
+    CASE Tier_Quartile
+        WHEN 1 THEN 'Top Quartile'
+        WHEN 2 THEN 'Quartile 2'
+        WHEN 3 THEN 'Quartile 3'
+        WHEN 4 THEN 'Bottom Quartile'
+    END AS Tier_Quartile,
+    
+    COUNT(DISTINCT Branch_Identifier) AS Branch_Count,
+    ROUND(SUM(Net_Products)::NUMERIC / NULLIF(SUM(Total_Loans), 0), 4) AS Blended_Net_CPL,
+    ROUND(AVG(Branch_CPL), 4) AS Avg_Branch_CPL,
+    ROUND(STDDEV(Branch_CPL), 4) AS StdDev_CPL,
+    SUM(Total_Loans) AS Total_Loans
+
+FROM Ranked_Within_Tier
+GROUP BY 1, 2, 3, Tier_Quartile
+ORDER BY Report_Year, Product_Tier, Tier_Quartile;
+
+
+-- ====================================================================
+-- QUERY 3: STATE PRODUCT AVAILABILITY SUMMARY
 -- ====================================================================
 
 SELECT 
     State_Cd,
 
-    -- Count of CPL-eligible products
     (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
@@ -82,7 +276,6 @@ SELECT
      CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
     ) AS CPL_Products_Available,
 
-    -- Credit products available
     RTRIM(
         CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 'SCL, ' ELSE '' END ||
         CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 'SCA, ' ELSE '' END ||
@@ -90,14 +283,12 @@ SELECT
         CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 'GAP (' || COALESCE(GAP_STATE_TYPE, 'N/A') || '), ' ELSE '' END
     , ', ') AS Credit_Products,
 
-    -- Credit product count
     (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
     ) AS Credit_Product_Count,
 
-    -- Non-credit products available
     RTRIM(
         CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 'ATL, ' ELSE '' END ||
         CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 'DIP, ' ELSE '' END ||
@@ -105,14 +296,12 @@ SELECT
         CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 'SSG, ' ELSE '' END
     , ', ') AS NonCredit_Products,
 
-    -- Non-credit product count
     (CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
      CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END
     ) AS NonCredit_Product_Count,
 
-    -- All CPL products concatenated
     RTRIM(
         CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 'SCL, ' ELSE '' END ||
         CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 'SCA, ' ELSE '' END ||
@@ -124,7 +313,6 @@ SELECT
         CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 'SSG, ' ELSE '' END
     , ', ') AS All_CPL_Products,
 
-    -- Missing products
     RTRIM(
         CASE WHEN SCL_STATE_AVAIL = 'N' THEN 'SCL, ' ELSE '' END ||
         CASE WHEN SCA_STATE_AVAIL = 'N' THEN 'SCA, ' ELSE '' END ||
@@ -136,7 +324,6 @@ SELECT
         CASE WHEN SSG_STATE_AVAIL = 'N' THEN 'SSG, ' ELSE '' END
     , ', ') AS Missing_Products,
 
-    -- Tier
     CASE 
         WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
               CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
@@ -153,5 +340,5 @@ SELECT
 
     GAP_STATE_TYPE
 
-FROM sb_common.State_Sales_Grid
+FROM SB_COMMON.State_Sales_Grid
 ORDER BY CPL_Products_Available ASC, State_Cd ASC;
