@@ -146,9 +146,9 @@ QUALIFY ROW_NUMBER() OVER (
     ORDER BY a.coverage_effective_dt DESC
 ) = 1;
 
+
 DROP TABLE SB_COMMON.State_Sales_Grid; 
 DROP TABLE  SB_COMMON.State_Product_Count;
-
 CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
     State_Cd VARCHAR(2) PRIMARY KEY,
     SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
@@ -182,7 +182,7 @@ INSERT INTO SB_COMMON.State_Sales_Grid VALUES
 ('MN','Y','Y','Y','Y','N',NULL,       'N','N','Y','Y','Y','N'),
 ('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),
 ('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
-('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- UPDATED: Missing from non-credit grid, all set to 'N'
+('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),
 ('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','N','Y','N'),
 ('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
 ('NH','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
@@ -205,6 +205,7 @@ INSERT INTO SB_COMMON.State_Sales_Grid VALUES
 ('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),
 ('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('WY','Y','Y','Y','Y','Y','Waiver',   'N','N','N','N','N','N');
+
 
 
 CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Product_Count AS
