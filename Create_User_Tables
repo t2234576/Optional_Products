@@ -149,7 +149,26 @@ QUALIFY ROW_NUMBER() OVER (
 
 DROP TABLE SB_COMMON.State_Sales_Grid; 
 DROP TABLE  SB_COMMON.State_Product_Count;
-CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
+-- ====================================================================
+-- UPDATED State_Sales_Grid — ALL MISMATCHES CORRECTED
+-- 
+-- CONFIRMED via web grid:
+--   MO: HA N → Y
+--   UT: HA N → Y
+--
+-- CONFIRMED via sales data (significant volume = product is live):
+--   TX: HA N → Y (13,952 sales)
+--   NC: HA N → Y (3,928 sales)
+--   SC: HA N → Y (2,260 sales)
+--   MO: HA N → Y (1,727 sales + web confirms)
+--   MS: HA N → Y (842 sales), SSG N → Y (249 sales)
+--   NE: HA N → Y (375 sales)
+--   UT: HA N → Y (187 sales + web confirms)
+--   ME: SSG N → Y (33 sales — low but included for completeness)
+-- ====================================================================
+
+DROP TABLE IF EXISTS SB_COMMON.State_Sales_Grid;
+CREATE OR REPLACE TABLE SB_COMMON.State_Sales_Grid (
     State_Cd VARCHAR(2) PRIMARY KEY,
     SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
     SCA_STATE_AVAIL CHAR(1), IUI_STATE_AVAIL CHAR(1),
@@ -176,35 +195,38 @@ INSERT INTO SB_COMMON.State_Sales_Grid VALUES
 ('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','Y'),
 ('KY','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),
 ('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),
+('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- *** SSG N→Y (33 sales) ***
 ('MD','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('MI','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
 ('MN','Y','Y','Y','Y','N',NULL,       'N','N','Y','Y','Y','N'),
-('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),
-('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
+('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),  -- *** HA N→Y (842), SSG N→Y (249) ***
+('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- *** HA N→Y (1,727 + web confirms) ***
 ('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),
-('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','N','Y','N'),
+('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),  -- *** HA N→Y (375 sales) ***
 ('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
 ('NH','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
 ('NJ','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','N','N'),
 ('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','Y'),
 ('NY','Y','N','Y','Y','N',NULL,       'N','N','Y','Y','N','N'),
-('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),
+('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),  -- *** HA N→Y (3,928 sales) ***
 ('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),
 ('OH','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('OK','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('OR','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
 ('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','N','N','N'),
+('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),  -- *** HA N→Y (2,260 sales) ***
 ('SD','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('TN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','N','N','N'),
-('UT','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
+('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','Y','N','N'),  -- *** HA N→Y (13,952 sales) ***
+('UT','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),  -- *** HA N→Y (187 + web confirms) ***
 ('VA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
 ('WA','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
 ('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),
 ('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('WY','Y','Y','Y','Y','Y','Waiver',   'N','N','N','N','N','N');
+
+
+
 
 
 
