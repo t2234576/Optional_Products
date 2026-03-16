@@ -146,6 +146,9 @@ QUALIFY ROW_NUMBER() OVER (
     ORDER BY a.coverage_effective_dt DESC
 ) = 1;
 
+DROP TABLE SB_COMMON.State_Sales_Grid; 
+DROP TABLE  SB_COMMON.State_Product_Count;
+
 CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
     State_Cd VARCHAR(2) PRIMARY KEY,
     SCL_STATE_AVAIL CHAR(1), SCL_MAX_AGE_STATE_AVAIL CHAR(1),
@@ -159,49 +162,76 @@ CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Sales_Grid (
 --        State SCL  MAX  SCA  IUI  GAP  GAP_TYPE     ATL  DIP  AUT  HA   SSG  OMP
 INSERT INTO SB_COMMON.State_Sales_Grid VALUES
 ('AL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
-('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- ATL: N→Y
-('CA','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),      -- ATL: N→Y
-('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('AZ','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('CA','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),
+('CO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),
 ('DE','Y','Y','Y','Y','Y','Waiver',   'N','N','Y','Y','Y','N'),
 ('FL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('GA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- SSG: Y→N
-('ID','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
-('IL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),      -- ADDED: missing from original
+('HI','Y','Y','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),
+('ID','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','Y'),
+('IL','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('IN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('IA','Y','Y','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
-('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('IA','Y','Y','Y','Y','N',NULL,       'N','N','N','N','N','N'),
+('KS','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','Y'),
 ('KY','Y','Y','Y','Y','Y','Waiver',   'Y','Y','Y','Y','Y','N'),
-('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- SCL_MAX_AGE: Y→N
-('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),      -- AUT: N→Y, HA: N→Y, SSG: Y→N
+('LA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('ME','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','N','N'),
 ('MD','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
 ('MI','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('MN','Y','Y','Y','Y','N',NULL,       'N','N','N','N','Y','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL
-('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),      -- GAP: Y→N, GAP_TYPE: Insurance→NULL, SSG: Y→N
+('MN','Y','Y','Y','Y','N',NULL,       'N','N','Y','Y','Y','N'),
+('MS','Y','Y','Y','Y','N',NULL,       'Y','N','Y','N','N','N'),
 ('MO','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
-('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','Y','N'),
+('MT','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- UPDATED: Missing from non-credit grid, all set to 'N'
 ('NE','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','N','Y','N'),
-('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),      -- SSG: N→Y
+('NV','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
 ('NH','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
-('NJ','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','N','N'),      -- SSG: Y→N
-('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('NY','Y','N','Y','Y','N',NULL,       'N','N','N','N','N','N'),      -- SSG: Y→N
-('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),      -- SSG: Y→N
-('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),      -- GAP: N→Y, GAP_TYPE: NULL→Insurance, AUT: N→Y, SSG: Y→N
+('NJ','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','N','N'),
+('NM','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','Y'),
+('NY','Y','N','Y','Y','N',NULL,       'N','N','Y','Y','N','N'),
+('NC','Y','N','Y','Y','Y','Insurance','Y','N','Y','N','N','N'),
+('ND','Y','N','Y','Y','Y','Insurance','N','N','Y','Y','N','N'),
 ('OH','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','Y','N'),
-('OK','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('OK','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('OR','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),      -- HA: N→Y
-('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','N','N','N'),      -- SSG: Y→N
+('PA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
+('SC','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','N','N','N'),
 ('SD','Y','N','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('TN','Y','Y','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
-('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','N','N','N'),      -- SSG: Y→N
-('UT','Y','Y','Y','Y','Y','Insurance','Y','N','N','N','Y','N'),
+('TX','Y','Y','Y','Y','N',NULL,       'N','N','Y','N','N','N'),
+('UT','Y','Y','Y','Y','Y','Insurance','Y','N','Y','N','Y','N'),
 ('VA','Y','N','Y','Y','Y','Insurance','Y','N','Y','Y','Y','N'),
 ('WA','Y','Y','Y','Y','N',NULL,       'Y','N','Y','Y','Y','N'),
-('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),      -- SSG: Y→N
-('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),      -- SSG: Y→N
+('WV','Y','Y','Y','Y','Y','Waiver',   'Y','N','N','N','N','N'),
+('WI','Y','Y','Y','Y','Y','Waiver',   'Y','N','Y','Y','N','N'),
 ('WY','Y','Y','Y','Y','Y','Waiver',   'N','N','N','N','N','N');
+
+
+CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Product_Count AS
+SELECT 
+    State_Cd,
+    (CASE WHEN SCL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SCA_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN IUI_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN GAP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN ATL_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN DIP_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN HA_STATE_AVAIL  = 'Y' THEN 1 ELSE 0 END +
+     CASE WHEN SSG_STATE_AVAIL = 'Y' THEN 1 ELSE 0 END) AS CPL_Products_Available,
+    CASE 
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) <= 5 
+            THEN 'Tier A: 4-5 Products'
+        WHEN (CASE WHEN SCL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SCA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN IUI_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN GAP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN ATL_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN DIP_STATE_AVAIL='Y' THEN 1 ELSE 0 END + 
+              CASE WHEN HA_STATE_AVAIL='Y' THEN 1 ELSE 0 END + CASE WHEN SSG_STATE_AVAIL='Y' THEN 1 ELSE 0 END) = 6 
+            THEN 'Tier B: 6 Products'
+        ELSE 'Tier C: 7-8 Products'
+    END AS Product_Tier
+FROM SB_COMMON.State_Sales_Grid;
 
 CREATE OR REPLACE TEMP TABLE SB_COMMON.State_Product_Count AS
 SELECT 
