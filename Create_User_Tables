@@ -3,6 +3,11 @@
 -- Permanent version of bdm.temp_loan_base_jy
 -- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
 -- ====================================================================
+-- ====================================================================
+-- CREATE SB_COMMON.LOAN_BASE_JY
+-- Permanent version of bdm.temp_loan_base_jy
+-- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
+-- ====================================================================
 DROP TABLE SB_COMMON.LOAN_BASE_JY;
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_BASE_JY AS
 
@@ -44,8 +49,12 @@ SELECT
     CASE WHEN b.offer_type IN ('sec only','review') THEN 'sec only'
          WHEN b.offer_type IN ('Null','decline') THEN 'decline'
          ELSE b.offer_type END AS offer_type,
-         
-    d.sdl,
+    b.ndi,  
+CASE 
+        WHEN UPPER(b.closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
+        WHEN UPPER(b.closing_method) IN ('KIOSK', 'BRANCH') THEN 'Branch'    
+        end as closing_method,
+        d.sdl,
     b.smd_nm,
     b.BRANCH_NM,
     b.OWN_SCORE_BRNCH,
@@ -105,7 +114,9 @@ SELECT
     b.affiliate_grp,
     b.risk,
     b.offer_type,
+    b.ndi,
     b.sdl,
+    b.closing_method,
     b.smd_nm,
     b.BRANCH_NM,
     b.OWN_SCORE_BRNCH,
@@ -145,7 +156,6 @@ QUALIFY ROW_NUMBER() OVER (
     PARTITION BY a.uai_id, a.coverage_abbreviation_cd 
     ORDER BY a.coverage_effective_dt DESC
 ) = 1;
-
 
 DROP TABLE SB_COMMON.State_Sales_Grid; 
 DROP TABLE  SB_COMMON.State_Product_Count;
