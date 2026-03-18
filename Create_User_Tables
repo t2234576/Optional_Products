@@ -9,6 +9,12 @@
 -- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
 -- ====================================================================
 DROP TABLE SB_COMMON.LOAN_BASE_JY;
+-- ====================================================================
+-- CREATE SB_COMMON.LOAN_BASE_JY
+-- Permanent version of bdm.temp_loan_base_jy
+-- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
+-- ====================================================================
+DROP TABLE SB_COMMON.LOAN_BASE_JY;
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_BASE_JY AS
 
 SELECT 
@@ -54,7 +60,19 @@ CASE
         WHEN UPPER(b.closing_method) IN ('ONLINE', 'REMOTE') THEN 'Online'
         WHEN UPPER(b.closing_method) IN ('KIOSK', 'BRANCH') THEN 'Branch'    
         end as closing_method,
+     -- Financial fields
+    b.AMOUNT_M,                    -- Amount financed (excl points, fees, premiums)
+    b.NEW_MONEY,                   -- New money over prior loan on renewals
+    b.ORIG_PREM_FINANCED,          -- Insurance premiums financed at closing
+
+    -- Demographic / eligibility fields
+    b.APPL_FINI_EMP_STATUS,        -- Finicity employment indicator
+    b.AUTO_WEIGHTED_AGE,           -- Vehicle age (weighted for stacked collateral)
+    b.P_BIRTH_DT,                  -- Primary applicant DOB
+    DATEDIFF('year', b.P_BIRTH_DT, b.tran_date) AS applicant_age,  -- Calculated age at origination
+    b.HOMEOWNER,                   -- Homeowner vs Renter
         d.sdl,
+    
     b.smd_nm,
     b.BRANCH_NM,
     b.OWN_SCORE_BRNCH,
@@ -89,10 +107,6 @@ LEFT JOIN BDM.REPORTING_STANDARDIZED_TOUCH_POINTS f
 WHERE b.tran_date >= '2019-01-01'
   AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL)
   AND b.offer_type NOT IN ('decline', 'Null');
-
-
-
-
 
 -- ====================================================================
 -- CREATE SB_COMMON.OPS_PRODUCT_JY
