@@ -15,10 +15,6 @@ DROP TABLE SB_COMMON.LOAN_BASE_JY;
 -- Added: SECURE_TYPE, SECURE_GRP from app_loan_production
 -- ====================================================================
 DROP TABLE SB_COMMON.LOAN_BASE_JY;
--- ====================================================================
--- UPDATED LOAN_BASE_JY — With verified employment status
--- ====================================================================
-
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_BASE_JY AS
 
 SELECT 
@@ -140,7 +136,6 @@ LEFT JOIN (
 WHERE b.tran_date >= '2019-01-01'
   AND (b.core_v_capp = 'Core' OR b.core_v_capp IS NULL)
   AND b.offer_type NOT IN ('decline', 'Null');
-
 
 -- ====================================================================
 -- CREATE SB_COMMON.OPS_PRODUCT_JY
