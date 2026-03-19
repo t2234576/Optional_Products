@@ -127,7 +127,7 @@ LEFT JOIN (
       AND verification_complete_i = 'Y'
     QUALIFY ROW_NUMBER() OVER (
         PARTITION BY branch_n, application_n 
-        ORDER BY employed_from_d ASC
+        ORDER BY employed_from_d desc
     ) = 1
 ) emp 
     ON b.OWN_SCORE_BRNCH = emp.branch_n 
