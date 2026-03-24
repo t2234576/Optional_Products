@@ -334,3 +334,62 @@ SELECT
         ELSE 'Tier C: 7-8 Products'
     END AS Product_Tier
 FROM SB_COMMON.State_Sales_Grid;
+
+CREATE OR REPLACE TABLE SB_COMMON.LOAN_CREDIT_INS_ELIGIBILITY_JY AS
+
+WITH aqiop_agg AS (
+    SELECT
+        branch_n,
+        application_n,
+        loan_product_c,
+        temp_quote_n,
+        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg LF%' 
+                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt LF%' 
+                 THEN 1 ELSE 0 END) AS SCL_ELIGIBLE,
+        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg AH%' 
+                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt AH%' 
+                 THEN 1 ELSE 0 END) AS SCA_ELIGIBLE,
+        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg IU%' 
+                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt IU%' 
+                 THEN 1 ELSE 0 END) AS IUI_ELIGIBLE,
+        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%GP%' 
+                 THEN 1 ELSE 0 END) AS GAP_ELIGIBLE
+    FROM eds.dialer.aqiopt00
+    GROUP BY 1, 2, 3, 4
+)
+
+SELECT
+    evl.branch_n,
+    evl.application_n,
+    TRY_TO_DATE(TO_CHAR(evl.entry_d), 'YYYYMMDD') AS ENTRY_D,
+    evl.loan_product_c,
+    evl.ins_codes_x,
+    evl.temp_quote_n,
+    evl.insurance_option_line_n,
+
+    COALESCE(iop.SCL_ELIGIBLE, 0)   AS SCL_ELIGIBLE,
+    COALESCE(iop.SCA_ELIGIBLE, 0)   AS SCA_ELIGIBLE,
+    COALESCE(iop.IUI_ELIGIBLE, 0)   AS IUI_ELIGIBLE,
+    COALESCE(iop.GAP_ELIGIBLE, 0)   AS GAP_ELIGIBLE,
+
+    COALESCE(iop.SCL_ELIGIBLE, 0) + COALESCE(iop.SCA_ELIGIBLE, 0) 
+  + COALESCE(iop.IUI_ELIGIBLE, 0) + COALESCE(iop.GAP_ELIGIBLE, 0) 
+    AS CREDIT_INS_ELIGIBLE_COUNT,
+
+    CASE WHEN COALESCE(iop.SCL_ELIGIBLE, 0) + COALESCE(iop.SCA_ELIGIBLE, 0) 
+            + COALESCE(iop.IUI_ELIGIBLE, 0) + COALESCE(iop.GAP_ELIGIBLE, 0) = 0
+         THEN 1 ELSE 0 END         AS BASE_LOAN_ONLY
+
+FROM ods.sat_application_evaluation evl
+LEFT JOIN aqiop_agg iop
+    ON  iop.branch_n       = evl.branch_n
+    AND iop.application_n  = evl.application_n
+    AND iop.loan_product_c = evl.loan_product_c
+    AND iop.temp_quote_n   = evl.temp_quote_n
+WHERE evl.rec_type_x   = 'A'
+  AND evl.record_seq_n = 1
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY evl.branch_n, evl.application_n
+    ORDER BY TRY_TO_DATE(TO_CHAR(evl.entry_d), 'YYYYMMDD') DESC
+) = 1
+;
