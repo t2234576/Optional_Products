@@ -1,0 +1,35 @@
+-- Test: skip CALNST00, join CAANIT00 directly to CAEVLT00
+-- Same approach as credit eligibility table
+CREATE OR REPLACE TEMPORARY TABLE SB_COMMON.TEMP_NC_RAW AS
+SELECT
+    evl.branch_n,
+    evl.application_n,
+    ani.ANCILLARY_PRODUCT_CODE   AS product_code,
+    ani.INCLUDE_I                AS include_i
+FROM ods.sat_application_evaluation evl
+LEFT JOIN eds.dialer.caanit00 ani
+    ON  ani.branch_n      = evl.branch_n
+    AND ani.application_n = evl.application_n
+    AND ani.ANCILLARY_PRODUCT_CODE IN ('ATL', 'DIP', 'H&A', 'SSG')
+WHERE evl.rec_type_x   = 'A'
+  AND evl.record_seq_n = 1;
+
+-- Then aggregate same as before
+CREATE OR REPLACE TABLE SB_COMMON.LOAN_NONCREDIT_INS_ELIGIBILITY_JY AS
+SELECT
+    branch_n,
+    application_n,
+    MAX(CASE WHEN product_code = 'ATL' THEN 1 ELSE 0 END) AS ATL_ELIGIBLE,
+    MAX(CASE WHEN product_code = 'ATL' AND include_i = 'Y' THEN 1 ELSE 0 END) AS ATL_SOLD_CLASS,
+    MAX(CASE WHEN product_code = 'DIP' THEN 1 ELSE 0 END) AS DIP_ELIGIBLE,
+    MAX(CASE WHEN product_code = 'DIP' AND include_i = 'Y' THEN 1 ELSE 0 END) AS DIP_SOLD_CLASS,
+    MAX(CASE WHEN product_code = 'H&A' THEN 1 ELSE 0 END) AS HA_ELIGIBLE,
+    MAX(CASE WHEN product_code = 'H&A' AND include_i = 'Y' THEN 1 ELSE 0 END) AS HA_SOLD_CLASS,
+    MAX(CASE WHEN product_code = 'SSG' THEN 1 ELSE 0 END) AS SSG_ELIGIBLE,
+    MAX(CASE WHEN product_code = 'SSG' AND include_i = 'Y' THEN 1 ELSE 0 END) AS SSG_SOLD_CLASS,
+    MAX(CASE WHEN product_code = 'ATL' THEN 1 ELSE 0 END)
+  + MAX(CASE WHEN product_code = 'DIP' THEN 1 ELSE 0 END)
+  + MAX(CASE WHEN product_code = 'H&A' THEN 1 ELSE 0 END)
+  + MAX(CASE WHEN product_code = 'SSG' THEN 1 ELSE 0 END) AS NONCREDIT_ELIGIBLE_COUNT
+FROM SB_COMMON.TEMP_NC_RAW
+GROUP BY 1, 2;
