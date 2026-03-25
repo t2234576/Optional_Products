@@ -336,7 +336,6 @@ SELECT
 FROM SB_COMMON.State_Sales_Grid;
 
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_CREDIT_INS_ELIGIBILITY_JY AS
-
 WITH aqiop_agg AS (
     SELECT
         branch_n,
@@ -356,6 +355,19 @@ WITH aqiop_agg AS (
                  THEN 1 ELSE 0 END) AS GAP_ELIGIBLE
     FROM eds.dialer.aqiopt00
     GROUP BY 1, 2, 3, 4
+),
+
+-- v7: Pre-aggregate CALNST00 fallback flags per branch+application
+calns_agg AS (
+    SELECT
+        branch_n + 0 AS branch_n,
+        application_n + 0 AS application_n,
+        MAX(CASE WHEN (app_life_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCL,
+        MAX(CASE WHEN (app_ah_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCA,
+        MAX(CASE WHEN (app_iui_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_IUI,
+        MAX(CASE WHEN (gap_desired_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_GAP
+    FROM eds.dialer.calnst00
+    GROUP BY 1, 2
 )
 
 SELECT
@@ -367,18 +379,43 @@ SELECT
     evl.temp_quote_n,
     evl.insurance_option_line_n,
 
-    COALESCE(iop.SCL_ELIGIBLE, 0)   AS SCL_ELIGIBLE,
-    COALESCE(iop.SCA_ELIGIBLE, 0)   AS SCA_ELIGIBLE,
-    COALESCE(iop.IUI_ELIGIBLE, 0)   AS IUI_ELIGIBLE,
-    COALESCE(iop.GAP_ELIGIBLE, 0)   AS GAP_ELIGIBLE,
+    -- v7: Three-layer eligibility: AQIOP → ins_codes_x → CALNST00
+    GREATEST(
+        COALESCE(iop.SCL_ELIGIBLE, 0),
+        CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%L%' THEN 1 ELSE 0 END,
+        COALESCE(lns.CALNS_SCL, 0)
+    ) AS SCL_ELIGIBLE,
 
-    COALESCE(iop.SCL_ELIGIBLE, 0) + COALESCE(iop.SCA_ELIGIBLE, 0) 
-  + COALESCE(iop.IUI_ELIGIBLE, 0) + COALESCE(iop.GAP_ELIGIBLE, 0) 
+    GREATEST(
+        COALESCE(iop.SCA_ELIGIBLE, 0),
+        CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%A%' THEN 1 ELSE 0 END,
+        COALESCE(lns.CALNS_SCA, 0)
+    ) AS SCA_ELIGIBLE,
+
+    GREATEST(
+        COALESCE(iop.IUI_ELIGIBLE, 0),
+        CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%I%' THEN 1 ELSE 0 END,
+        COALESCE(lns.CALNS_IUI, 0)
+    ) AS IUI_ELIGIBLE,
+
+    GREATEST(
+        COALESCE(iop.GAP_ELIGIBLE, 0),
+        CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%G%' THEN 1 ELSE 0 END,
+        COALESCE(lns.CALNS_GAP, 0)
+    ) AS GAP_ELIGIBLE,
+
+    GREATEST(COALESCE(iop.SCL_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%L%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_SCL,0))
+  + GREATEST(COALESCE(iop.SCA_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%A%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_SCA,0))
+  + GREATEST(COALESCE(iop.IUI_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%I%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_IUI,0))
+  + GREATEST(COALESCE(iop.GAP_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%G%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_GAP,0))
     AS CREDIT_INS_ELIGIBLE_COUNT,
 
-    CASE WHEN COALESCE(iop.SCL_ELIGIBLE, 0) + COALESCE(iop.SCA_ELIGIBLE, 0) 
-            + COALESCE(iop.IUI_ELIGIBLE, 0) + COALESCE(iop.GAP_ELIGIBLE, 0) = 0
-         THEN 1 ELSE 0 END         AS BASE_LOAN_ONLY
+    CASE WHEN
+        GREATEST(COALESCE(iop.SCL_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%L%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_SCL,0))
+      + GREATEST(COALESCE(iop.SCA_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%A%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_SCA,0))
+      + GREATEST(COALESCE(iop.IUI_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%I%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_IUI,0))
+      + GREATEST(COALESCE(iop.GAP_ELIGIBLE,0), CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%G%' THEN 1 ELSE 0 END, COALESCE(lns.CALNS_GAP,0))
+      = 0 THEN 1 ELSE 0 END AS BASE_LOAN_ONLY
 
 FROM ods.sat_application_evaluation evl
 LEFT JOIN aqiop_agg iop
@@ -386,10 +423,12 @@ LEFT JOIN aqiop_agg iop
     AND iop.application_n  = evl.application_n
     AND iop.loan_product_c = evl.loan_product_c
     AND iop.temp_quote_n   = evl.temp_quote_n
+LEFT JOIN calns_agg lns
+    ON  lns.branch_n       = evl.branch_n
+    AND lns.application_n  = evl.application_n
 WHERE evl.rec_type_x   = 'A'
   AND evl.record_seq_n = 1
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY evl.branch_n, evl.application_n
     ORDER BY TRY_TO_DATE(TO_CHAR(evl.entry_d), 'YYYYMMDD') DESC
-) = 1
-;
+) = 1;
