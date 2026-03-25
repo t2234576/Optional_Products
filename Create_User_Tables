@@ -445,3 +445,85 @@ QUALIFY ROW_NUMBER() OVER (
     PARTITION BY evl.branch_n, evl.application_n
     ORDER BY TRY_TO_DATE(TO_CHAR(evl.entry_d), 'YYYYMMDD') DESC
 ) = 1;
+-- ====================================================================
+-- CREATE SB_COMMON.LOAN_ELIG_INDEXED_JY
+-- Eligibility indexed to LOAN_BASE_JY on uai_id
+-- branch_n + application_n is unique in LOAN_BASE_JY (booked loans only)
+-- so this join is guaranteed 1-to-1
+-- Run AFTER both LOAN_BASE_JY and LOAN_CREDIT_INS_ELIGIBILITY_JY are built
+-- ====================================================================
+
+CREATE OR REPLACE TABLE SB_COMMON.LOAN_ELIG_INDEXED_JY AS
+
+SELECT
+    -- Loan base keys
+    b.uai_id,
+    b.acct_key,
+    b.OWN_SCORE_BRNCH,
+    b.application_n,
+    b.tran_date,
+    b.month,
+
+    -- Loan dimensions
+    b.cust,
+    b.cust2,
+    b.channel,
+    b.closing_method,
+    b.risk,
+    b.offer_type,
+    b.ndi,
+    b.state,
+    b.smd_nm,
+    b.BRANCH_NM,
+    b.sdl,
+    b.cpl_filter,
+    b.reactive_flag,
+    b.SECURE_TYPE,
+    b.SECURE_GRP,
+    b.Net_CPL_Loan_Flag,
+
+    -- Demographics (no ALP join ever needed downstream)
+    b.P_BIRTH_DT,
+    b.applicant_age,
+    b.verified_emp_status,
+    b.APPL_FINI_EMP_STATUS,
+    b.HOMEOWNER,
+    b.AMOUNT_M,
+    b.NEW_MONEY,
+
+    -- Secure stratum for GAP normalization
+    CASE
+        WHEN b.SECURE_TYPE = 'Unsecured' THEN 'Unsecured'
+        ELSE 'Secured'
+    END AS SECURE_TYPE_GRP,
+
+    -- Eligibility fields
+    e.ENTRY_D,
+    e.SCL_ELIGIBLE,
+    e.SCA_ELIGIBLE,
+    e.IUI_ELIGIBLE,
+    e.GAP_ELIGIBLE,
+    e.CREDIT_INS_ELIGIBLE_COUNT,
+    e.BASE_LOAN_ONLY,
+
+    -- Age-based ineligibility flags
+    CASE WHEN e.SCL_ELIGIBLE = 0 AND b.applicant_age > 65 THEN 1 ELSE 0 END AS SCL_OVER_AGE_FLAG,
+    CASE WHEN e.SCA_ELIGIBLE = 0 AND b.applicant_age > 65 THEN 1 ELSE 0 END AS SCA_OVER_AGE_FLAG,
+    CASE WHEN e.IUI_ELIGIBLE = 0 AND b.applicant_age > 65 THEN 1 ELSE 0 END AS IUI_OVER_AGE_FLAG,
+
+    -- Employment-based ineligibility flags
+    CASE WHEN e.SCA_ELIGIBLE = 0
+          AND b.verified_emp_status IN ('Retired','Unemployed','Benefits')
+         THEN 1 ELSE 0 END AS SCA_EMP_INELIG_FLAG,
+    CASE WHEN e.IUI_ELIGIBLE = 0
+          AND b.verified_emp_status IN ('Retired','Unemployed','Benefits','Self-Employed')
+         THEN 1 ELSE 0 END AS IUI_EMP_INELIG_FLAG
+
+FROM SB_COMMON.LOAN_BASE_JY b
+INNER JOIN SB_COMMON.LOAN_CREDIT_INS_ELIGIBILITY_JY e
+    ON  e.branch_n      = b.OWN_SCORE_BRNCH
+    AND e.application_n = b.application_n
+QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY b.uai_id
+    ORDER BY ABS(DATEDIFF('day', e.ENTRY_D, b.tran_date)) ASC
+) = 1;
