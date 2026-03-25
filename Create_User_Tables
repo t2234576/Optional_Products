@@ -336,37 +336,53 @@ SELECT
 FROM SB_COMMON.State_Sales_Grid;
 
 CREATE OR REPLACE TABLE SB_COMMON.LOAN_CREDIT_INS_ELIGIBILITY_JY AS
+
 WITH aqiop_agg AS (
     SELECT
-        branch_n,
-        application_n,
-        loan_product_c,
-        temp_quote_n,
-        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg LF%' 
-                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt LF%' 
+        evl.branch_n + 0 AS branch_n,
+        evl.application_n + 0 AS application_n,
+        MAX(CASE WHEN ((iop.wk_ins_codes COLLATE '') ILIKE '%Sg LF%' 
+                    OR (iop.wk_ins_codes COLLATE '') ILIKE '%Jt LF%')
+                  AND iop.wk_life_premium > 0
                  THEN 1 ELSE 0 END) AS SCL_ELIGIBLE,
-        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg AH%' 
-                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt AH%' 
+        MAX(CASE WHEN ((iop.wk_ins_codes COLLATE '') ILIKE '%Sg AH%' 
+                    OR (iop.wk_ins_codes COLLATE '') ILIKE '%Jt AH%')
+                  AND iop.wk_ah_premium > 0
                  THEN 1 ELSE 0 END) AS SCA_ELIGIBLE,
-        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%Sg IU%' 
-                   OR (wk_ins_codes COLLATE '') ILIKE '%Jt IU%' 
+        MAX(CASE WHEN ((iop.wk_ins_codes COLLATE '') ILIKE '%Sg IU%' 
+                    OR (iop.wk_ins_codes COLLATE '') ILIKE '%Jt IU%')
+                  AND iop.wk_iui_premium > 0
                  THEN 1 ELSE 0 END) AS IUI_ELIGIBLE,
-        MAX(CASE WHEN (wk_ins_codes COLLATE '') ILIKE '%GP%' 
+        MAX(CASE WHEN (iop.wk_ins_codes COLLATE '') ILIKE '%GP%' 
                  THEN 1 ELSE 0 END) AS GAP_ELIGIBLE
-    FROM eds.dialer.aqiopt00
-    GROUP BY 1, 2, 3, 4
+    FROM ods.sat_application_evaluation evl
+    INNER JOIN eds.dialer.aqiopt00 iop
+        ON  iop.branch_n       = evl.branch_n
+        AND iop.application_n  = evl.application_n
+        AND iop.loan_product_c = evl.loan_product_c
+        AND iop.temp_quote_n   = evl.temp_quote_n
+    WHERE evl.rec_type_x   = 'A'
+      AND evl.record_seq_n = 1
+    GROUP BY 1, 2
 ),
 
--- v7: Pre-aggregate CALNST00 fallback flags per branch+application
 calns_agg AS (
     SELECT
-        branch_n + 0 AS branch_n,
-        application_n + 0 AS application_n,
-        MAX(CASE WHEN (app_life_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCL,
-        MAX(CASE WHEN (app_ah_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCA,
-        MAX(CASE WHEN (app_iui_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_IUI,
-        MAX(CASE WHEN (gap_desired_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_GAP
-    FROM eds.dialer.calnst00
+        evl.branch_n + 0 AS branch_n,
+        evl.application_n + 0 AS application_n,
+        MAX(CASE WHEN (lns.app_life_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCL,
+        MAX(CASE WHEN (lns.app_ah_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_SCA,
+        MAX(CASE WHEN (lns.app_iui_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_IUI,
+        MAX(CASE WHEN (lns.gap_desired_i COLLATE '') = 'Y' THEN 1 ELSE 0 END) AS CALNS_GAP
+    FROM ods.sat_application_evaluation evl
+    INNER JOIN eds.dialer.calnst00 lns
+        ON  lns.branch_n      = evl.branch_n
+        AND lns.application_n = evl.application_n
+        AND lns.rec_type_x    = SUBSTR(evl.populated_from_source_x, 1, 1)
+        AND lns.record_seq_n  = COALESCE(TRY_CAST(SUBSTR(evl.populated_from_source_x, 2, 5) AS INT), 0)
+    WHERE evl.rec_type_x   = 'A'
+      AND evl.record_seq_n = 1
+      AND evl.populated_from_source_x <> ' '
     GROUP BY 1, 2
 )
 
@@ -379,7 +395,6 @@ SELECT
     evl.temp_quote_n,
     evl.insurance_option_line_n,
 
-    -- v7: Three-layer eligibility: AQIOP → ins_codes_x → CALNST00
     GREATEST(
         COALESCE(iop.SCL_ELIGIBLE, 0),
         CASE WHEN (evl.ins_codes_x COLLATE '') LIKE '%L%' THEN 1 ELSE 0 END,
@@ -419,13 +434,11 @@ SELECT
 
 FROM ods.sat_application_evaluation evl
 LEFT JOIN aqiop_agg iop
-    ON  iop.branch_n       = evl.branch_n
-    AND iop.application_n  = evl.application_n
-    AND iop.loan_product_c = evl.loan_product_c
-    AND iop.temp_quote_n   = evl.temp_quote_n
+    ON  iop.branch_n      = evl.branch_n
+    AND iop.application_n = evl.application_n
 LEFT JOIN calns_agg lns
-    ON  lns.branch_n       = evl.branch_n
-    AND lns.application_n  = evl.application_n
+    ON  lns.branch_n      = evl.branch_n
+    AND lns.application_n = evl.application_n
 WHERE evl.rec_type_x   = 'A'
   AND evl.record_seq_n = 1
 QUALIFY ROW_NUMBER() OVER (
