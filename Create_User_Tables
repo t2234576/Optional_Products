@@ -148,8 +148,6 @@ CREATE OR REPLACE TABLE SB_COMMON.OPS_PRODUCT_JY AS
 
 SELECT 
     a.*,
-    
-    -- Inheriting dimensions from the loan base
     b.cust,
     b.cust2,
     b.channel,
@@ -168,24 +166,23 @@ SELECT
     b.cpl_filter,
     b.core_capp_filter,
     b.reactive_flag,
-
-    -- Secure loan fields (NEW)
     b.SECURE_TYPE,
     b.SECURE_GRP,
 
-    -- Sold Flag Logic
-    CASE WHEN c_sale.day_of_week = 'Sun' AND a.coverage_effective_dt < CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
+    CASE WHEN c_sale.day_of_week = 'Sun'  AND a.coverage_effective_dt < CURRENT_DATE - 2  AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
          WHEN c_sale.day_of_week <> 'Sun' AND a.coverage_effective_dt <= CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1 
          ELSE 0 END AS NET_CPL_SOLD_FLAG,
 
-    -- Cancel Flag Logic
-    CASE WHEN a.cancel_60day_ct = 1 AND a.customer_initiated_cancel_yn = 'Y' AND c_can.day_of_week = 'Sun' AND a.cancel_effective_dt < CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
+    CASE WHEN a.cancel_60day_ct = 1 AND a.customer_initiated_cancel_yn = 'Y' AND c_can.day_of_week = 'Sun'  AND a.cancel_effective_dt < CURRENT_DATE - 2  AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1
          WHEN a.cancel_60day_ct = 1 AND a.customer_initiated_cancel_yn = 'Y' AND c_can.day_of_week <> 'Sun' AND a.cancel_effective_dt <= CURRENT_DATE - 2 AND a.coverage_abbreviation_cd IN ('SCL','SCA','IUI','GAP','DIP','MLP','ATL','HA','SSG') THEN 1 
          ELSE 0 END AS NET_CPL_CANCEL_FLAG
 
 FROM core.optional_product_sale a
+
 INNER JOIN SB_COMMON.LOAN_BASE_JY b 
-    ON a.uai_id = b.uai_id
+    ON  a.uai_id          = b.uai_id
+    AND a.SCORE_BRANCH_NO = b.OWN_SCORE_BRNCH  -- ** NEW: lock to originating branch **
+
 LEFT JOIN bdm.business_day_calendar c_sale 
     ON a.coverage_effective_dt = c_sale.day_of_month
 LEFT JOIN bdm.business_day_calendar c_can 
@@ -195,10 +192,13 @@ WHERE a.uai_id IS NOT NULL
   AND a.SALE_CT = 1
   AND (a.coverage_effective_dt >= '2019-01-01' OR a.cancel_effective_dt >= '2019-01-01')
   AND b.offer_type NOT IN ('decline', 'Null')
+
 QUALIFY ROW_NUMBER() OVER (
     PARTITION BY a.uai_id, a.coverage_abbreviation_cd 
     ORDER BY a.coverage_effective_dt DESC
 ) = 1;
+
+
 
 DROP TABLE SB_COMMON.State_Sales_Grid; 
 DROP TABLE  SB_COMMON.State_Product_Count;
